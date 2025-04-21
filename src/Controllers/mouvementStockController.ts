@@ -1,22 +1,10 @@
 import { Request, Response } from "express";
 import { MouvementStock } from "../Models/model"; // Assure-toi d'avoir exporté MouvementStock dans ton fichier de modèles
 
-// 🔹 Obtenir tous les mouvements de stock
-// export const getAllMouvementsStock = async (req: Request, res: Response) => {
-//   try {
-//     const mouvements = await MouvementStock.find()
-//       .populate("pointVente")
-//       .populate("produit")
-//       .populate("categorie");
-//     res.json(mouvements);
-//   } catch (err) {
-//     res.status(500).json({ message: "Erreur interne", error: err });
-//   }
-// };
-
 export const getAllMouvementsStock = async (req: Request, res: Response) => {
   try {
     const mouvements = await MouvementStock.find()
+      .sort({ createdAt: -1 }) // tri décroissant
       .populate("pointVente")
       .populate({
         path: "produit",

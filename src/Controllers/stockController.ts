@@ -5,6 +5,7 @@ import { Stock } from "../Models/model";
 export const getAllStocks = async (req: Request, res: Response) => {
   try {
     const stocks = await Stock.find()
+      .sort({ createdAt: -1 }) // tri décroissant par date de création
       .populate({
         path: "produit",
         populate: {
