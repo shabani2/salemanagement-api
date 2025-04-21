@@ -1,3 +1,4 @@
+// models.ts
 import mongoose, { Schema, Document } from "mongoose";
 import { UserRole } from "../Utils/constant";
 import {
@@ -9,6 +10,7 @@ import {
   IPointVente,
   IProduit,
   IRegion,
+  IStock,
   IUser,
   IVente,
 } from "./interfaceModels";
@@ -61,10 +63,8 @@ const ProduitSchema = new Schema<IProduit>(
       required: true,
     },
     prix: { type: Number, required: true },
+    prixVente: { type: Number, required: true },
     tva: { type: Number, required: true },
-    numeroSerie: { type: String, required: true, unique: true },
-    codeBar: { type: String, required: true, unique: true },
-    // image: { type: String },
   },
   { timestamps: true },
 );
@@ -100,55 +100,13 @@ const RegionSchema = new Schema<IRegion>(
   { timestamps: true },
 );
 
-const VenteSchema = new Schema<IVente>(
+const StockSchema = new Schema<IStock>(
   {
-    vendeur: { type: Schema.Types.ObjectId, ref: "User", required: true },
-    pointVente: {
-      type: Schema.Types.ObjectId,
-      ref: "PointVente",
-      required: true,
-    },
-    produits: [
-      {
-        produit: {
-          type: Schema.Types.ObjectId,
-          ref: "Produit",
-          required: true,
-        },
-        quantite: { type: Number, required: true },
-        prixTotal: { type: Number, required: true },
-      },
-    ],
-    totalHT: { type: Number, required: true },
-    totalTVA: { type: Number, required: true },
-    totalTTC: { type: Number, required: true },
-  },
-  { timestamps: true },
-);
-
-const LivraisonSchema = new Schema<ILivraison>(
-  {
-    expediteur: { type: Schema.Types.ObjectId, ref: "User", required: true },
-    pointVente: {
-      type: Schema.Types.ObjectId,
-      ref: "PointVente",
-      required: true,
-    },
-    produits: [
-      {
-        produit: {
-          type: Schema.Types.ObjectId,
-          ref: "Produit",
-          required: true,
-        },
-        quantite: { type: Number, required: true },
-      },
-    ],
-    statut: {
-      type: String,
-      enum: ["En Attente", "Validée"],
-      default: "En Attente",
-    },
+    produit: { type: Schema.Types.ObjectId, ref: "Produit", required: true },
+    quantite: { type: Number, required: true, default: 0 },
+    montant: { type: Number, required: true, default: 0 },
+    pointVente: { type: Schema.Types.ObjectId, ref: "PointVente" },
+    depotCentral: { type: Boolean, default: false },
   },
   { timestamps: true },
 );
@@ -178,37 +136,137 @@ const CommandeSchema = new Schema<ICommande>(
   { timestamps: true },
 );
 
+CategorieSchema.pre("findOneAndDelete", async function (next) {
+  try {
+    const categorie = this.getQuery()._id;
+    await Produit.deleteMany({ categorie });
+    next();
+  } catch (err) {
+    next(err as mongoose.CallbackError);
+  }
+});
+
 const MouvementStockSchema = new Schema<IMouvementStock>(
   {
     pointVente: {
-      type: Schema.Types.ObjectId,
+      type: mongoose.Schema.Types.ObjectId,
       ref: "PointVente",
+      required: false,
+    },
+    depotCentral: { type: Boolean, default: false },
+    produit: { type: Schema.Types.ObjectId, ref: "Produit", required: true },
+    type: {
+      type: String,
+      enum: ["Entrée", "Sortie", "Vente", "Livraison", "Commande"],
       required: true,
     },
-    produit: { type: Schema.Types.ObjectId, ref: "Produit", required: true },
-    type: { type: String, enum: ["Entrée", "Sortie"], required: true },
     quantite: { type: Number, required: true },
-    reference: { type: Schema.Types.ObjectId, required: true },
-    statut: {
-      type: String,
-      enum: ["En Attente", "Validée"],
-      default: "En Attente",
-    },
+    montant: { type: Number, required: true },
+    statut: { type: Boolean, default: false },
   },
   { timestamps: true },
 );
 
-UserSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) return next();
-  this.password = await bcrypt.hash(this.password, 10);
-  next();
+// PRE-SAVE VALIDATION
+MouvementStockSchema.pre("save", async function (next) {
+  try {
+    const { type, statut, produit, quantite, pointVente } = this;
+
+    if (type === "Entrée") return next();
+
+    if (type === "Livraison") {
+      const depotStock = await Stock.findOne({ produit, depotCentral: true });
+      if (!depotStock || depotStock.quantite < quantite) {
+        return next(new Error("Stock insuffisant au dépôt central"));
+      }
+      return next();
+    }
+
+    if (!statut) return next();
+
+    const pointStock = await Stock.findOne({ produit, pointVente });
+    if (!pointStock || pointStock.quantite < quantite) {
+      return next(new Error("Stock insuffisant au point de vente"));
+    }
+
+    next();
+  } catch (error) {
+    next(error as mongoose.CallbackError);
+  }
 });
 
-// Comparer le mot de passe
-UserSchema.methods.comparePassword = function (
-  plainText: string,
+// POST-SAVE LOGIC
+MouvementStockSchema.post("save", async function (doc) {
+  try {
+    const { produit, quantite, type, statut, pointVente, montant } = doc;
+
+    const adjustStock = async (
+      filter: Record<string, any>,
+      qtyChange: number,
+      montantChange: number,
+    ) => {
+      try {
+        await Stock.findOneAndUpdate(
+          filter,
+          {
+            $inc: { quantite: qtyChange, montant: montantChange },
+            $setOnInsert: { produit: filter.produit },
+          },
+          {
+            upsert: true,
+            new: true,
+            setDefaultsOnInsert: true,
+          },
+        );
+      } catch (err) {
+        console.error("Erreur ajustement stock:", err);
+      }
+    };
+
+    if (type === "Entrée") {
+      await adjustStock({ produit, depotCentral: true }, quantite, montant);
+      return;
+    }
+
+    if (!statut && type !== "Livraison") return;
+
+    if (["Sortie", "Vente", "Commande"].includes(type)) {
+      if (!pointVente) return;
+      await adjustStock({ produit, pointVente }, -quantite, -montant);
+    }
+
+    if (type === "Livraison") {
+      if (!pointVente) return;
+      await adjustStock({ produit, pointVente }, quantite, montant);
+      await adjustStock({ produit, depotCentral: true }, -quantite, -montant);
+    }
+  } catch (err) {
+    console.error("Erreur post-save MouvementStock:", err);
+  }
+});
+
+UserSchema.pre("save", async function (next) {
+  try {
+    if (!this.isModified("password")) return next();
+    this.password = await bcrypt.hash(this.password, 10);
+    next();
+  } catch (err) {
+    next(err as mongoose.CallbackError);
+  }
+});
+
+// UserSchema.methods.comparePassword = function (plainText: string): Promise<boolean> {
+//   if (!this.password) return Promise.resolve(false);
+//   return bcrypt.compare(plainText, this.password);
+// };
+
+UserSchema.methods.comparePassword = async function (
+  candidatePassword: string,
 ): Promise<boolean> {
-  return bcrypt.compare(plainText, this.password);
+  console.log("Comparaison mdp =>");
+  console.log("Mot de passe en clair:", candidatePassword);
+  console.log("Mot de passe hashé:", this.password);
+  return await bcrypt.compare(candidatePassword, this.password);
 };
 
 export const User = mongoose.model<IUser>("User", UserSchema);
@@ -227,23 +285,9 @@ export const PointVente = mongoose.model<IPointVente>(
 );
 export const Region = mongoose.model<IRegion>("Region", RegionSchema);
 export const Commande = mongoose.model<ICommande>("Commande", CommandeSchema);
+export const Stock = mongoose.model<IStock>("Stock", StockSchema);
+
 export const MouvementStock = mongoose.model<IMouvementStock>(
   "MouvementStock",
   MouvementStockSchema,
 );
-export const Vente = mongoose.model<IVente>("Vente", VenteSchema);
-export const Livraison = mongoose.model<ILivraison>(
-  "Livraison",
-  LivraisonSchema,
-);
-
-PointVenteSchema.pre("findOneAndDelete", async function (next) {
-  const pointVente = this.getQuery()._id;
-  await Produit.deleteMany({ pointVente });
-  next();
-});
-CategorieSchema.pre("findOneAndDelete", async function (next) {
-  const categorie = this.getQuery()._id;
-  await Produit.deleteMany({ categorie });
-  next();
-});

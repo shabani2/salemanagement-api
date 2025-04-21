@@ -58,21 +58,27 @@ export const register = async (req: MulterRequest, res: Response) => {
 };
 
 export const login = async (req: Request, res: Response): Promise<void> => {
-  // ✅ Void car Express ne veut pas un Response en retour
   try {
     const { telephone, password } = req.body;
     const user = await User.findOne({ telephone });
 
-    if (!user || !(await user.comparePassword(password))) {
-      res
-        .status(401)
-        .json({ message: "Numéro de téléphone ou mot de passe incorrect" });
-      return; // ✅ Fin de la fonction après envoi de réponse
+    if (!user) {
+      res.status(401).json({ message: "Numéro de téléphone incorrect" });
+      return;
+    }
+
+    const isMatch = await user.comparePassword(password);
+
+    if (!isMatch) {
+      res.status(401).json({ message: "Mot de passe incorrect" });
+      return;
     }
 
     const token = generateToken(user.id, user.role);
-    res.json({ token, user }); // ✅ On envoie la réponse, pas besoin de `return`
+    console.log("Utilisateur connecté:", user);
+    res.json({ token, user });
   } catch (err) {
+    console.error("Erreur lors du login :", err); // ✅ utile pour diagnostiquer
     res.status(500).json({ message: "Erreur interne", error: err });
   }
 };

@@ -32,14 +32,14 @@ export interface ICategorie extends Document {
 }
 
 // Modèle Produit
-export interface IProduit extends Document {
+export interface IProduit {
   nom: string;
   categorie: mongoose.Types.ObjectId;
   prix: number;
+  prixVente: number;
   tva: number;
-  numeroSerie: string;
-  codeBar: string;
-  // image?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 // Modèle Point de Vente
@@ -88,10 +88,19 @@ export interface ICommande extends Document {
 
 // Modèle MouvementStock
 export interface IMouvementStock extends Document {
-  pointVente: mongoose.Types.ObjectId;
+  pointVente?: mongoose.Types.ObjectId;
+  depotCentral?: Boolean;
   produit: mongoose.Types.ObjectId;
-  type: "Entrée" | "Sortie";
+  type: "Entrée" | "Sortie" | "Vente" | "Livraison" | "Commande";
   quantite: number;
-  reference: mongoose.Types.ObjectId;
-  statut: "En Attente" | "Validée";
+  montant: number;
+  statut: boolean;
+}
+
+export interface IStock extends Document {
+  produit: mongoose.Types.ObjectId | IProduit;
+  quantite: number;
+  montant: number;
+  pointVente?: mongoose.Types.ObjectId | IPointVente;
+  depotCentral: boolean;
 }

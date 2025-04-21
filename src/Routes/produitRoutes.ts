@@ -8,6 +8,7 @@ import {
   getProduitById,
 } from "../Controllers/produitController";
 import { upload } from "../Middlewares/upload";
+import { updatePointVente } from "../Controllers/pointVenteController";
 
 const router = express.Router();
 
@@ -30,11 +31,17 @@ router.delete(
   authorize(["SuperAdmin", "AdminRegion", "AdminPointVente"]),
   deleteProduit,
 );
-router.delete(
+router.get(
   "/:id",
   authenticate,
   authorize(["SuperAdmin", "AdminRegion", "AdminPointVente"]),
   getProduitById,
+);
+router.put(
+  "/:id",
+  authenticate,
+  authorize(["SuperAdmin", "AdminRegion", "AdminPointVente"]),
+  updatePointVente,
 );
 
 export default router;

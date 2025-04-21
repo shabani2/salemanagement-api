@@ -132,11 +132,9 @@ export const updateUser = async (
       if (existingUser && existingUser._id.toString() !== user._id.toString()) {
         console.log("❌ Le numéro de téléphone ou l'amail est déjà utilisé");
 
-        res
-          .status(400)
-          .json({
-            message: "Le numéro de téléphone ou l'email est déjà utilisé",
-          });
+        res.status(400).json({
+          message: "Le numéro de téléphone ou l'email est déjà utilisé",
+        });
         return;
       }
 

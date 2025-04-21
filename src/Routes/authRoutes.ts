@@ -8,12 +8,7 @@ const AuthRoutes = express.Router();
 //ts-ignore
 AuthRoutes.post("/login", login);
 AuthRoutes.post("/logout", logout);
-// AuthRoutes.post(
-//   "/register",
-//   express.urlencoded({ extended: true }),
-//   upload.single("image"),
-//   register,
-// );
+
 AuthRoutes.post("/register", upload.single("image"), register);
 
 export default AuthRoutes;

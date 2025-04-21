@@ -12,6 +12,9 @@ import organisationRoutes from "./Routes/organisationRoutes";
 import regionRoutes from "./Routes/regionRoutes";
 import pointVenteRoutes from "./Routes/pointVenteRoutes";
 import path from "path";
+import { Produit } from "./Models/model";
+import mouvementStockRoute from "./Routes/mouvementStockRoute";
+import stockRouter from "./Routes/stockRoutes";
 
 dotenv.config();
 const app = express();
@@ -60,7 +63,7 @@ app.use(
   express.static(path.join(__dirname, "assets/SuperAdmin")),
 );
 app.use(
-  "/assets/assets/AdminRegion",
+  "/assets/AdminRegion",
   express.static(path.join(__dirname, "assets/AdminRegion")),
 );
 app.use(
@@ -84,6 +87,8 @@ app.use("/produits", produitRoutes);
 app.use("/organisations", organisationRoutes);
 app.use("/region", regionRoutes);
 app.use("/point-ventes", pointVenteRoutes);
+app.use("/mouvementStock", mouvementStockRoute);
+app.use("/stock", stockRouter);
 
 // Test CORS directement
 app.get("/test-cors", (req, res) => {
@@ -93,6 +98,8 @@ app.get("/test-cors", (req, res) => {
 // Gestion des erreurs
 app.use(notFound);
 app.use(errorHandler);
+//Produit.collection.dropIndex("numeroSerie_1");
+// Produit.collection.dropIndex("codeBar_1");
 
 // 🔥 Lancement du serveur
 const Port = process.env.PORT || 8000;
