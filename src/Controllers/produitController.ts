@@ -1,10 +1,14 @@
+// controllers/produitController.ts
+
 import { Request, Response } from "express";
-import { Produit } from "../Models/model"; // ton modèle mongoose
+import { Produit } from "../Models/model";
 
 // 🔹 Obtenir tous les produits
 export const getAllProduits = async (req: Request, res: Response) => {
   try {
-    const produits = await Produit.find().populate("categorie");
+    const produits = await Produit.find()
+      .sort({ createdAt: -1 })
+      .populate("categorie");
     res.json(produits);
   } catch (err) {
     res.status(500).json({ message: "Erreur interne", error: err });
@@ -34,9 +38,19 @@ export const getProduitById = async (
 // 🔹 Créer un produit
 export const createProduit = async (req: Request, res: Response) => {
   try {
-    const { nom, categorie, prix, tva, prixVente } = req.body;
+    const { nom, categorie, prix, tva, prixVente, marge, netTopay, unite } =
+      req.body;
 
-    const produit = new Produit({ nom, categorie, prix, tva, prixVente });
+    const produit = new Produit({
+      nom,
+      categorie,
+      prix,
+      tva,
+      prixVente,
+      marge,
+      netTopay,
+      unite,
+    });
     await produit.save();
     res.status(201).json(produit);
   } catch (err) {
@@ -45,26 +59,40 @@ export const createProduit = async (req: Request, res: Response) => {
 };
 
 // 🔹 Mettre à jour un produit
-export const updateProduit = async (req: Request, res: Response) => {
+export const updateProduit = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
   try {
     const { id } = req.params;
-    const { nom, categorie, prix, tva } = req.body;
 
-    const updatedProduit = await Produit.findByIdAndUpdate(
-      id,
-      { nom, categorie, prix, tva },
-      { new: true },
-    );
+    const updateData: Partial<{
+      nom: string;
+      categorie: string;
+      prix: number;
+      tva: number;
+      prixVente: number;
+      marge: number;
+      netTopay: number;
+      unite: string;
+    }> = req.body;
+
+    const updatedProduit = await Produit.findByIdAndUpdate(id, updateData, {
+      new: true,
+      runValidators: true,
+    }).populate("categorie");
 
     if (!updatedProduit) {
-      return res.status(404).json({ message: "Produit non trouvé" });
+      res.status(404).json({ message: "Produit non trouvé" });
+      return;
     }
 
     res.json(updatedProduit);
   } catch (err) {
-    res
-      .status(400)
-      .json({ message: "Erreur lors de la mise à jour", error: err });
+    res.status(400).json({
+      message: "Erreur lors de la mise à jour du produit",
+      error: err instanceof Error ? err.message : err,
+    });
   }
 };
 

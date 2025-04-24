@@ -36,8 +36,11 @@ export interface IProduit {
   nom: string;
   categorie: mongoose.Types.ObjectId;
   prix: number;
+  marge?: number;
+  netTopay?: number;
   prixVente: number;
   tva: number;
+  unite?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }

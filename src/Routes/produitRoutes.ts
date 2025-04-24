@@ -6,6 +6,7 @@ import {
   deleteProduit,
   getAllProduits,
   getProduitById,
+  updateProduit,
 } from "../Controllers/produitController";
 import { upload } from "../Middlewares/upload";
 import { updatePointVente } from "../Controllers/pointVenteController";
@@ -41,7 +42,7 @@ router.put(
   "/:id",
   authenticate,
   authorize(["SuperAdmin", "AdminRegion", "AdminPointVente"]),
-  updatePointVente,
+  updateProduit,
 );
 
 export default router;

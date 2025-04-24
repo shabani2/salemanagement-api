@@ -64,3 +64,46 @@ export const getCategorieById = async (req: Request, res: Response) => {
     return;
   }
 };
+
+export const updateCategorie = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { nom, type } = req.body;
+
+    const categorie = await Categorie.findById(id);
+    if (!categorie) {
+      res.status(404).json({ message: "Catégorie non trouvée" });
+      return;
+    }
+
+    // Si un nouveau fichier est uploadé, on gère l’upload et on supprime l’ancienne image
+    if (req.file) {
+      const categorieDir = path.join(__dirname, "./../assets/categorie");
+      if (!fs.existsSync(categorieDir))
+        fs.mkdirSync(categorieDir, { recursive: true });
+
+      const newImagePath = `../assets/categorie/${req.file.filename}`;
+      fs.renameSync(req.file.path, path.join(categorieDir, req.file.filename));
+
+      if (categorie.image) {
+        const oldImageFullPath = path.join(__dirname, "..", categorie.image);
+        if (fs.existsSync(oldImageFullPath)) fs.unlinkSync(oldImageFullPath);
+      }
+      categorie.image = newImagePath;
+    }
+
+    // Mise à jour des champs
+    if (nom !== undefined) categorie.nom = nom;
+    if (type !== undefined) categorie.type = type;
+
+    await categorie.save();
+    res.json(categorie);
+  } catch (err) {
+    res
+      .status(500)
+      .json({ message: "Erreur lors de la mise à jour", error: err });
+  }
+};

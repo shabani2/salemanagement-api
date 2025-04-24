@@ -65,6 +65,9 @@ const ProduitSchema = new Schema<IProduit>(
     prix: { type: Number, required: true },
     prixVente: { type: Number, required: true },
     tva: { type: Number, required: true },
+    marge: { type: Number, required: false },
+    netTopay: { type: Number, required: false },
+    unite: { type: String, required: false },
   },
   { timestamps: true },
 );

@@ -6,6 +6,7 @@ import {
   deleteCategorie,
   getAllCategories,
   getCategorieById,
+  updateCategorie,
 } from "../Controllers/categorieController";
 import { upload } from "../Middlewares/upload";
 
@@ -30,11 +31,12 @@ router.delete(
   authorize(["SuperAdmin", "AdminRegion", "AdminPointVente"]),
   deleteCategorie,
 );
-router.delete(
+router.put(
   "/:id",
   authenticate,
   authorize(["SuperAdmin", "AdminRegion", "AdminPointVente"]),
-  getCategorieById,
+  upload.single("image"),
+  updateCategorie,
 );
 
 export default router;
