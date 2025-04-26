@@ -1,23 +1,32 @@
-import { Request, Response } from "express";
-import { Organisation } from "../Models/model";
+// controllers/organisationController.ts
 
+import fs from "fs";
+import path from "path";
+import { Request, Response } from "express";
+import { Organisations } from "../Models/model";
+
+// 🔹 Obtenir toutes les organisations
 export const getAllOrganisations = async (req: Request, res: Response) => {
   try {
-    const organisations = await Organisation.find();
+    const organisations = await Organisations.find().populate("superAdmin");
     res.json(organisations);
   } catch (err) {
     res.status(500).json({ message: "Erreur interne", error: err });
   }
 };
 
+// 🔹 Obtenir une organisation par ID
 export const getOrganisationById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const organisation = await Organisation.findById(id);
+    const organisation =
+      await Organisations.findById(id).populate("superAdmin");
+
     if (!organisation) {
       res.status(404).json({ message: "Organisation non trouvée" });
       return;
     }
+
     res.json(organisation);
     return;
   } catch (err) {
@@ -26,10 +35,45 @@ export const getOrganisationById = async (req: Request, res: Response) => {
   }
 };
 
+// 🔹 Créer une organisation avec upload de logo
 export const createOrganisation = async (req: Request, res: Response) => {
   try {
-    const { nom, adresse, telephone, email } = req.body;
-    const organisation = new Organisation({ nom, adresse, telephone, email });
+    const {
+      nom,
+      rccm,
+      contact,
+      siegeSocial,
+      devise,
+      superAdmin,
+      pays,
+      emailEntreprise,
+    } = req.body;
+
+    let logoPath = "";
+    const orgDir = path.join(__dirname, "./../assets/organisations");
+
+    if (!fs.existsSync(orgDir)) {
+      fs.mkdirSync(orgDir, { recursive: true });
+    }
+
+    if (req.file) {
+      logoPath = `../assets/organisations/${req.file.filename}`;
+      const destination = path.join(orgDir, req.file.filename);
+      fs.renameSync(req.file.path, destination);
+    }
+
+    const organisation = new Organisations({
+      nom,
+      rccm,
+      contact,
+      siegeSocial,
+      logo: logoPath,
+      devise,
+      superAdmin,
+      pays,
+      emailEntreprise,
+    });
+
     await organisation.save();
     res.status(201).json(organisation);
   } catch (err) {
@@ -37,11 +81,36 @@ export const createOrganisation = async (req: Request, res: Response) => {
   }
 };
 
+// 🔹 Mettre à jour une organisation
+export const updateOrganisation = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+
+    const updated = await Organisations.findByIdAndUpdate(id, updateData, {
+      new: true,
+      runValidators: true,
+    }).populate("superAdmin");
+
+    if (!updated) {
+      res.status(404).json({ message: "Organisation non trouvée" });
+      return;
+    }
+
+    res.json(updated);
+    return;
+  } catch (err) {
+    res.status(400).json({ message: "Erreur de mise à jour", error: err });
+    return;
+  }
+};
+
+// 🔹 Supprimer une organisation
 export const deleteOrganisation = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    await Organisation.findByIdAndDelete(id);
-    res.json({ message: "Organisation supprimée avec succès" });
+    await Organisations.findByIdAndDelete(id);
+    res.json({ message: "Organisation supprimée" });
   } catch (err) {
     res.status(500).json({ message: "Erreur interne", error: err });
   }

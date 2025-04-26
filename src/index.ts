@@ -8,13 +8,15 @@ import AuthRoutes from "./Routes/authRoutes";
 import usersRouter from "./Routes/userRoutes";
 import categorieRoutes from "./Routes/categorieRoutes";
 import produitRoutes from "./Routes/produitRoutes";
-import organisationRoutes from "./Routes/organisationRoutes";
+
 import regionRoutes from "./Routes/regionRoutes";
 import pointVenteRoutes from "./Routes/pointVenteRoutes";
 import path from "path";
 import { Produit } from "./Models/model";
 import mouvementStockRoute from "./Routes/mouvementStockRoute";
 import stockRouter from "./Routes/stockRoutes";
+import organisationRoutes from "./Routes/organisationRoutes";
+import pdfRouter from "./Routes/pdfRouter";
 
 dotenv.config();
 const app = express();
@@ -84,11 +86,13 @@ app.use("/auth", AuthRoutes);
 app.use("/user", usersRouter);
 app.use("/categories", categorieRoutes);
 app.use("/produits", produitRoutes);
+
 app.use("/organisations", organisationRoutes);
 app.use("/region", regionRoutes);
 app.use("/point-ventes", pointVenteRoutes);
 app.use("/mouvementStock", mouvementStockRoute);
 app.use("/stock", stockRouter);
+app.use("/generatePdf", pdfRouter);
 
 // Test CORS directement
 app.get("/test-cors", (req, res) => {

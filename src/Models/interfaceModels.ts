@@ -17,13 +17,6 @@ export interface IUser extends Document {
 }
 
 // Modèle Organisation
-export interface IOrganisation extends Document {
-  nom: string;
-  adresse: string;
-  telephone: string;
-  email: string;
-  logo?: string;
-}
 // Modèle Catégorie de produit
 export interface ICategorie extends Document {
   nom: string;
@@ -106,4 +99,18 @@ export interface IStock extends Document {
   montant: number;
   pointVente?: mongoose.Types.ObjectId | IPointVente;
   depotCentral: boolean;
+}
+
+export interface IOrganisation extends Document {
+  nom: string;
+  rccm: string;
+  contact: string;
+  siegeSocial: string;
+  logo?: string;
+  devise: string;
+  superAdmin: Types.ObjectId | IUser;
+  pays: string;
+  emailEntreprise: string;
+  createdAt: Date;
+  updatedAt: Date;
 }

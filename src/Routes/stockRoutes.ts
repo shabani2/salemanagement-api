@@ -1,10 +1,14 @@
 import express from "express";
+import { Request, Response } from "express";
+
 import {
   getAllStocks,
   getStockById,
   createStock,
   updateStock,
   deleteStock,
+  //checkStock,
+  checkStockHandler,
 } from "../Controllers/stockController";
 
 const stockRouter = express.Router();
@@ -23,5 +27,7 @@ stockRouter.put("/:id", updateStock);
 
 // 🔹 DELETE /stocks/:id - Supprimer un stock
 stockRouter.delete("/:id", deleteStock);
+
+stockRouter.post("/check", checkStockHandler);
 
 export default stockRouter;

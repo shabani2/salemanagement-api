@@ -41,47 +41,6 @@ export const getMouvementStockById = async (req: Request, res: Response) => {
   }
 };
 
-// 🔹 Créer un mouvement de stock
-// export const createMouvementStock = async (req: Request, res: Response) => {
-//   try {
-//     const {
-//       pointVente,
-//       depotCentral,
-//       produit,
-//       type,
-//       quantite,
-//       montant,
-//       statut,
-//     } = req.body;
-
-//     // Validation personnalisée : au moins pointVente OU depotCentral doit être présent
-//     if (!pointVente && depotCentral !== true) {
-//       res.status(400).json({
-//         message:
-//           "Un mouvement doit être associé à un point de vente ou être marqué comme venant du dépôt central.",
-//       });
-//       return;
-//     }
-
-//     const mouvement = new MouvementStock({
-//       pointVente,
-//       depotCentral,
-//       produit,
-//       type,
-//       quantite,
-//       montant,
-//       statut,
-//     });
-
-//     await mouvement.save();
-//     res.status(201).json(mouvement);
-//     return;
-//   } catch (err) {
-//     res.status(400).json({ message: "Erreur lors de la création", error: err });
-//     return;
-//   }
-// };
-
 export const createMouvementStock = async (req: Request, res: Response) => {
   try {
     const {
@@ -170,6 +129,31 @@ export const deleteMouvementStock = async (req: Request, res: Response) => {
     return;
   } catch (err) {
     res.status(500).json({ message: "Erreur interne", error: err });
+    return;
+  }
+};
+
+// 🔹 Valider le mouvement de stock (changer le statut en true)
+export const validateState = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const mouvement = await MouvementStock.findById(id);
+
+    if (!mouvement) {
+      res.status(404).json({ message: "Mouvement non trouvé" });
+      return;
+    }
+
+    mouvement.statut = true;
+    await mouvement.save();
+
+    res.json({ message: "Statut du mouvement mis à jour", mouvement });
+    return;
+  } catch (err) {
+    res
+      .status(500)
+      .json({ message: "Erreur lors de la validation", error: err });
     return;
   }
 };

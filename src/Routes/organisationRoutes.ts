@@ -1,29 +1,67 @@
+// routes/organisationRoutes.ts
+
 import express from "express";
-import { authenticate } from "../Middlewares/auth";
-import { authorize } from "../Middlewares/authorize";
+import multer from "multer";
+import path from "path";
+
 import {
   createOrganisation,
   deleteOrganisation,
   getAllOrganisations,
   getOrganisationById,
+  updateOrganisation,
 } from "../Controllers/organisationController";
-//import { getRegionById } from '../Controllers/regionController';
 
-const router = express.Router();
+import { authenticate } from "../Middlewares/auth";
+import { authorize } from "../Middlewares/authorize";
 
-router.get("/", authenticate, authorize(["SuperAdmin"]), getAllOrganisations);
-router.post("/", authenticate, authorize(["SuperAdmin"]), createOrganisation);
-router.delete(
-  "/:id",
+const organisationRoutes = express.Router();
+
+// 📁 Configuration Multer pour upload de logo
+const storage = multer.diskStorage({
+  destination: path.join(__dirname, "../tmp"),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    const name = `${Date.now()}_${file.fieldname}${ext}`;
+    cb(null, name);
+  },
+});
+const upload = multer({ storage });
+
+organisationRoutes.get(
+  "/",
   authenticate,
   authorize(["SuperAdmin"]),
-  deleteOrganisation,
+  getAllOrganisations,
 );
-router.get(
+
+organisationRoutes.post(
+  "/",
+  authenticate,
+  authorize(["SuperAdmin"]),
+  upload.single("logo"),
+  createOrganisation,
+);
+
+organisationRoutes.get(
   "/:id",
   authenticate,
   authorize(["SuperAdmin"]),
   getOrganisationById,
 );
 
-export default router;
+organisationRoutes.put(
+  "/:id",
+  authenticate,
+  authorize(["SuperAdmin"]),
+  updateOrganisation,
+);
+
+organisationRoutes.delete(
+  "/:id",
+  authenticate,
+  authorize(["SuperAdmin"]),
+  deleteOrganisation,
+);
+
+export default organisationRoutes;

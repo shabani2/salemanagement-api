@@ -34,17 +34,6 @@ const UserSchema = new Schema<IUser>(
   { timestamps: true },
 );
 
-const OrganisationSchema = new Schema<IOrganisation>(
-  {
-    nom: { type: String, required: true },
-    adresse: { type: String, required: true },
-    telephone: { type: String, required: true },
-    email: { type: String, required: true },
-    logo: { type: String },
-  },
-  { timestamps: true },
-);
-
 const CategorieSchema = new Schema<ICategorie>(
   {
     nom: { type: String, required: true },
@@ -258,11 +247,6 @@ UserSchema.pre("save", async function (next) {
   }
 });
 
-// UserSchema.methods.comparePassword = function (plainText: string): Promise<boolean> {
-//   if (!this.password) return Promise.resolve(false);
-//   return bcrypt.compare(plainText, this.password);
-// };
-
 UserSchema.methods.comparePassword = async function (
   candidatePassword: string,
 ): Promise<boolean> {
@@ -273,10 +257,7 @@ UserSchema.methods.comparePassword = async function (
 };
 
 export const User = mongoose.model<IUser>("User", UserSchema);
-export const Organisation = mongoose.model<IOrganisation>(
-  "Organisation",
-  OrganisationSchema,
-);
+
 export const Categorie = mongoose.model<ICategorie>(
   "Categorie",
   CategorieSchema,
@@ -293,4 +274,24 @@ export const Stock = mongoose.model<IStock>("Stock", StockSchema);
 export const MouvementStock = mongoose.model<IMouvementStock>(
   "MouvementStock",
   MouvementStockSchema,
+);
+
+const OrganisationSchema = new Schema<IOrganisation>(
+  {
+    nom: { type: String, required: true },
+    rccm: { type: String, required: true },
+    contact: { type: String, required: true },
+    siegeSocial: { type: String, required: true },
+    logo: { type: String },
+    devise: { type: String, required: true },
+    superAdmin: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    pays: { type: String, required: true },
+    emailEntreprise: { type: String, required: true },
+  },
+  { timestamps: true },
+);
+
+export const Organisations = mongoose.model<IOrganisation>(
+  "Organisation",
+  OrganisationSchema,
 );
