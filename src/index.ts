@@ -8,7 +8,7 @@ import AuthRoutes from "./Routes/authRoutes";
 import usersRouter from "./Routes/userRoutes";
 import categorieRoutes from "./Routes/categorieRoutes";
 import produitRoutes from "./Routes/produitRoutes";
-
+import morgan from "morgan";
 import regionRoutes from "./Routes/regionRoutes";
 import pointVenteRoutes from "./Routes/pointVenteRoutes";
 import path from "path";
@@ -94,6 +94,7 @@ app.use("/mouvementStock", mouvementStockRoute);
 app.use("/stock", stockRouter);
 app.use("/generatePdf", pdfRouter);
 
+
 // Test CORS directement
 app.get("/test-cors", (req, res) => {
   res.json({ message: "CORS fonctionne bien !" });
@@ -108,4 +109,7 @@ app.use(errorHandler);
 // 🔥 Lancement du serveur
 const Port = process.env.PORT || 8000;
 //app.listen(Port, () => console.log(`🚀 Server is running on port ${Port}`));
+app.use(morgan("dev"));
+console.log("🚀 Express app initialisée");
+
 export default app;
