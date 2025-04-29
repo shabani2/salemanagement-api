@@ -108,7 +108,7 @@ export interface IOrganisation extends Document {
   siegeSocial: string;
   logo?: string;
   devise: string;
-  superAdmin: Types.ObjectId | IUser;
+  superAdmin: string | IUser;
   pays: string;
   emailEntreprise: string;
   createdAt: Date;
