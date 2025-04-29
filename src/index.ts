@@ -107,4 +107,5 @@ app.use(errorHandler);
 
 // 🔥 Lancement du serveur
 const Port = process.env.PORT || 8000;
-app.listen(Port, () => console.log(`🚀 Server is running on port ${Port}`));
+//app.listen(Port, () => console.log(`🚀 Server is running on port ${Port}`));
+export default app;
