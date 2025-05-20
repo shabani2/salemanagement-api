@@ -5,9 +5,20 @@ import { AuthenticatedRequest } from "../Middlewares/auth";
 // Obtenir tous les utilisateurs (SuperAdmin seulement)
 export const getAllUsers = async (req: Request, res: Response) => {
   try {
-    const users = await User.find().sort({ createdAt: -1 }); // Tri décroissant par createdAt
+    const users = await User.find()
+      .populate("region") // Région directe de l'utilisateur
+      .populate({
+        path: "pointVente",
+        populate: [
+          { path: "region" }, // Région liée au point de vente
+          { path: "stock" }, // Stock lié au point de vente
+        ],
+      })
+      .sort({ createdAt: -1 });
+
     res.json(users);
   } catch (err) {
+    console.error("Erreur dans getAllUsers:", err);
     res.status(500).json({ message: "Erreur interne", error: err });
   }
 };
@@ -27,16 +38,29 @@ export const getUsersByRegion = async (
 };
 
 // Obtenir les utilisateurs d'un point de vente (AdminPointVente seulement)
-export const getUsersByPointVente = async (
-  req: AuthenticatedRequest,
-  res: Response,
-) => {
+export const getUsersByPointVente = async (req: Request, res: Response) => {
   try {
-    const { pointVente } = req.user;
-    const users = await User.find({ pointVente });
+    const { pointVenteId } = req.params;
+
+    if (!pointVenteId) {
+      res.status(400).json({ message: "ID du point de vente requis" });
+      return;
+    }
+
+    const users = await User.find({ pointVente: pointVenteId })
+      .populate("region")
+      .populate({
+        path: "pointVente",
+        populate: [{ path: "region" }, { path: "stock" }],
+      })
+      .sort({ createdAt: -1 });
+
     res.json(users);
+    return;
   } catch (err) {
+    console.error("Erreur dans getUsersByPointVente:", err);
     res.status(500).json({ message: "Erreur interne", error: err });
+    return;
   }
 };
 

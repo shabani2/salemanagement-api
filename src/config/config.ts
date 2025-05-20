@@ -9,12 +9,12 @@ const getDatabaseUri = (): string => {
   const env = process.env.NODE_ENV;
 
   switch (env) {
-    case 'production':
-      return process.env.MONGO_URI_PROD || throwMissingEnv('MONGO_URI_PROD');
-    case 'test':
-      return process.env.MONGO_URI_TEST || throwMissingEnv('MONGO_URI_TEST');
+    case "production":
+      return process.env.MONGO_URI_PROD || throwMissingEnv("MONGO_URI_PROD");
+    case "test":
+      return process.env.MONGO_URI_TEST || throwMissingEnv("MONGO_URI_TEST");
     default:
-      return process.env.MONGO_URI_LOCAL || throwMissingEnv('MONGO_URI_LOCAL');
+      return process.env.MONGO_URI_LOCAL || throwMissingEnv("MONGO_URI_LOCAL");
   }
 };
 
@@ -27,5 +27,5 @@ const throwMissingEnv = (key: string): never => {
 
 export const config = {
   databaseUri: getDatabaseUri(),
-  nodeEnv: process.env.NODE_ENV || 'development',
+  nodeEnv: process.env.NODE_ENV || "development",
 };

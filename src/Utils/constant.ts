@@ -5,4 +5,5 @@ export const UserRole = [
   "AdminPointVente",
   "Vendeur",
   "Client",
+  "Gerant",
 ] as const;

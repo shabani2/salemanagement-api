@@ -72,6 +72,7 @@ app.use(
   "/assets/AdminPointVente",
   express.static(path.join(__dirname, "assets/AdminPointVente")),
 );
+
 app.use(
   "/assets/Vendeur",
   express.static(path.join(__dirname, "assets/Vendeur")),
@@ -79,6 +80,14 @@ app.use(
 app.use(
   "/assets/Client",
   express.static(path.join(__dirname, "assets/Client")),
+);
+app.use(
+  "/assets/Gerant",
+  express.static(path.join(__dirname, "assets/Gerant")),
+);
+app.use(
+  "/assets/organisations",
+  express.static(path.join(__dirname, "assets/organisations")),
 );
 
 // Routes principales
@@ -94,7 +103,6 @@ app.use("/mouvementStock", mouvementStockRoute);
 app.use("/stock", stockRouter);
 app.use("/generatePdf", pdfRouter);
 
-
 // Test CORS directement
 app.get("/test-cors", (req, res) => {
   res.json({ message: "CORS fonctionne bien !" });
@@ -108,7 +116,7 @@ app.use(errorHandler);
 
 // 🔥 Lancement du serveur
 const Port = process.env.PORT || 8000;
-//app.listen(Port, () => console.log(`🚀 Server is running on port ${Port}`));
+app.listen(Port, () => console.log(`🚀 Server is running on port ${Port}`));
 app.use(morgan("dev"));
 console.log("🚀 Express app initialisée");
 

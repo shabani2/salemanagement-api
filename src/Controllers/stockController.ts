@@ -21,6 +21,33 @@ export const getAllStocks = async (req: Request, res: Response) => {
   }
 };
 
+export const getStocksByPointVente = async (req: Request, res: Response) => {
+  try {
+    const { pointVenteId } = req.params;
+
+    if (!pointVenteId) {
+      res.status(400).json({ message: "ID du point de vente requis" });
+    }
+
+    const stocks = await Stock.find({ pointVente: pointVenteId })
+      .sort({ createdAt: -1 })
+      .populate({
+        path: "produit",
+        populate: {
+          path: "categorie",
+          model: "Categorie",
+        },
+      })
+      .populate("pointVente");
+
+    res.json(stocks);
+    return;
+  } catch (err) {
+    res.status(500).json({ message: "Erreur interne", error: err });
+    return;
+  }
+};
+
 // 🔹 Obtenir un stock par ID
 export const getStockById = async (req: Request, res: Response) => {
   try {

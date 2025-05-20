@@ -164,7 +164,7 @@ MouvementStockSchema.pre("save", async function (next) {
   try {
     const { type, statut, produit, quantite, pointVente } = this;
 
-    if (type === "Entrée") return next();
+    if (type === "Entrée" || "Commande") return next();
 
     if (type === "Livraison") {
       const depotStock = await Stock.findOne({ produit, depotCentral: true });
@@ -222,7 +222,7 @@ MouvementStockSchema.post("save", async function (doc) {
 
     if (!statut && type !== "Livraison") return;
 
-    if (["Sortie", "Vente", "Commande"].includes(type)) {
+    if (["Sortie", "Vente"].includes(type)) {
       if (!pointVente) return;
       await adjustStock({ produit, pointVente }, -quantite, -montant);
     }

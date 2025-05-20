@@ -1,9 +1,40 @@
 import { Request, Response } from "express";
 import { Region } from "../Models/model";
 
+// export const getAllRegions = async (req: Request, res: Response) => {
+//   try {
+//     const regions = await Region.find();
+//     res.json(regions);
+//   } catch (err) {
+//     res.status(500).json({ message: "Erreur interne", error: err });
+//   }
+// };
+
 export const getAllRegions = async (req: Request, res: Response) => {
   try {
-    const regions = await Region.find();
+    const regions = await Region.aggregate([
+      {
+        $lookup: {
+          from: "pointventes", // le nom de la collection MongoDB (attention au pluriel et minuscule)
+          localField: "_id",
+          foreignField: "region",
+          as: "pointsVente",
+        },
+      },
+      {
+        $addFields: {
+          pointVenteCount: { $size: "$pointsVente" },
+        },
+      },
+      {
+        $project: {
+          nom: 1,
+          ville: 1,
+          pointVenteCount: 1,
+        },
+      },
+    ]);
+
     res.json(regions);
   } catch (err) {
     res.status(500).json({ message: "Erreur interne", error: err });

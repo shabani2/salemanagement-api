@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { MouvementStock } from "../Models/model"; // Assure-toi d'avoir exporté MouvementStock dans ton fichier de modèles
+import mongoose from "mongoose";
 
 export const getAllMouvementsStock = async (req: Request, res: Response) => {
   try {
@@ -17,6 +18,35 @@ export const getAllMouvementsStock = async (req: Request, res: Response) => {
     res.json(mouvements);
   } catch (err) {
     res.status(500).json({ message: "Erreur interne", error: err });
+  }
+};
+
+export const getMouvementsStockByPointVente = async (
+  req: Request,
+  res: Response,
+) => {
+  try {
+    const { pointVenteId } = req.params;
+    if (!pointVenteId) res.status(400).json({ message: "ID requis" });
+
+    const mouvements = await MouvementStock.find({
+      pointVente: new mongoose.Types.ObjectId(pointVenteId),
+    })
+      .sort({ createdAt: -1 })
+      .populate("pointVente")
+      .populate({
+        path: "produit",
+        populate: { path: "categorie", model: "Categorie" },
+      });
+
+    if (!mouvements.length)
+      res.status(404).json({ message: "Aucun mouvement trouvé" });
+
+    res.json(mouvements);
+    return;
+  } catch (err) {
+    res.status(500).json({ message: "Erreur interne", error: err });
+    return;
   }
 };
 
