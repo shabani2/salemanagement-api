@@ -8,6 +8,7 @@ import {
   createOrganisation,
   deleteOrganisation,
   getAllOrganisations,
+  getDefaultOrganisationLogo,
   getOrganisationById,
   updateOrganisation,
 } from "../Controllers/organisationController";
@@ -29,9 +30,15 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 organisationRoutes.get(
+  "/logo",
+
+  getDefaultOrganisationLogo,
+);
+
+organisationRoutes.get(
   "/",
   authenticate,
-  authorize(["SuperAdmin"]),
+  // authorize(["SuperAdmin"]),
   getAllOrganisations,
 );
 

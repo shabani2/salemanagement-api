@@ -115,3 +115,32 @@ export const deleteOrganisation = async (req: Request, res: Response) => {
     res.status(500).json({ message: "Erreur interne", error: err });
   }
 };
+
+// 🔹 Récupérer le logo de la première organisation
+export const getDefaultOrganisationLogo = async (
+  req: Request,
+  res: Response,
+) => {
+  try {
+    const organisation = await Organisations.findOne().sort({ _id: 1 });
+
+    if (!organisation) {
+      res.status(404).json({ message: "Aucune organisation trouvée" });
+      return;
+    }
+
+    if (!organisation.logo) {
+      res
+        .status(404)
+        .json({ message: "Aucun logo défini pour cette organisation" });
+      return;
+    }
+
+    const filename = path.basename(organisation.logo);
+    const publicPath = `/assets/organisations/${filename}`;
+
+    res.json({ logoUrl: publicPath });
+  } catch (err) {
+    res.status(500).json({ message: "Erreur interne", error: err });
+  }
+};

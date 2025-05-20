@@ -8,31 +8,31 @@ import {
   updatePointVente,
 } from "../Controllers/pointVenteController";
 
-const router = express.Router();
+const pointVenteRoutes = express.Router();
 
-router.get(
+pointVenteRoutes.get(
   "/",
   authenticate,
-  authorize(["SuperAdmin", "AdminRegion"]),
+  // authorize(["SuperAdmin", "AdminRegion"]),
   getAllPointVentes,
 );
-router.post(
+pointVenteRoutes.post(
   "/",
   authenticate,
   authorize(["SuperAdmin", "AdminRegion"]),
   createPointVente,
 );
-router.delete(
+pointVenteRoutes.delete(
   "/:id",
   authenticate,
   authorize(["SuperAdmin", "AdminRegion"]),
   deletePointVente,
 );
-router.put(
+pointVenteRoutes.put(
   "/:id",
   authenticate,
   authorize(["SuperAdmin", "AdminRegion"]),
   updatePointVente,
 );
 
-export default router;
+export default pointVenteRoutes;

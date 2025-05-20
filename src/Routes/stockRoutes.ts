@@ -9,6 +9,7 @@ import {
   deleteStock,
   //checkStock,
   checkStockHandler,
+  getStocksByPointVente,
 } from "../Controllers/stockController";
 
 const stockRouter = express.Router();
@@ -18,6 +19,7 @@ stockRouter.get("/", getAllStocks);
 
 // 🔹 GET /stocks/:id - Obtenir un stock par ID
 stockRouter.get("/:id", getStockById);
+stockRouter.get("/stock-by-pv/:pointVenteId", getStocksByPointVente);
 
 // 🔹 POST /stocks - Créer un nouveau stock
 stockRouter.post("/", createStock);

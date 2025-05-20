@@ -1,5 +1,3 @@
-
-
 // import mongoose from "mongoose";
 // import dotenv from "dotenv";
 
@@ -19,7 +17,6 @@
 //     process.exit(1);
 //   }
 // };
-
 
 // import mongoose from "mongoose";
 
@@ -59,7 +56,6 @@
 //   }
 // };
 
-
 import mongoose from "mongoose";
 import { config } from "../config/config";
 
@@ -78,4 +74,3 @@ export const connectDB = async () => {
     process.exit(1);
   }
 };
-

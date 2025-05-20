@@ -1,38 +1,20 @@
 import { Request, Response } from "express";
 import path from "path";
 import fs from "fs";
-import { User } from "../Models/model";
+import { User, UserRoleType } from "../Models/model";
 import { generateToken } from "../Utils/jwt";
+import { UserRole } from "../Utils/constant";
 
 interface MulterRequest extends Request {
   file?: Express.Multer.File;
 }
 
-export const register = async (req: MulterRequest, res: Response) => {
+export const register = async (
+  req: MulterRequest,
+  res: Response,
+): Promise<void> => {
   try {
-    const { nom, prenom, telephone, email, adresse, password, role } = req.body;
-    // Vérifie si l'email ou le téléphone existent déjà
-    const existingUser = await User.findOne({
-      $or: [{ email }, { telephone }],
-    });
-    if (existingUser) {
-      res.status(400).json({ message: "Email ou téléphone déjà utilisé" });
-      return;
-    }
-
-    let imagePath = "";
-    if (req.file) {
-      const uploadDir = path.join(__dirname, `./../assets/${role}`);
-      if (!fs.existsSync(uploadDir)) {
-        fs.mkdirSync(uploadDir, { recursive: true });
-      }
-      imagePath = `../assets/${role}/${req.file.filename}`;
-      const destinationPath = path.join(uploadDir, req.file.filename);
-      // Déplacer le fichier vers le bon dossier (optionnel si Multer gère déjà ça)
-      fs.renameSync(req.file.path, destinationPath);
-    }
-
-    const user = new User({
+    const {
       nom,
       prenom,
       telephone,
@@ -40,12 +22,87 @@ export const register = async (req: MulterRequest, res: Response) => {
       adresse,
       password,
       role,
-      image: imagePath,
+      region,
+      pointVente,
+    } = req.body;
+
+    // Vérification unicité email ou téléphone
+    const existingUser = await User.findOne({
+      $or: [{ email }, { telephone }],
     });
-    await user.save();
+
+    if (existingUser) {
+      res.status(400).json({ message: "Email ou téléphone déjà utilisé" });
+      return;
+    }
+
+    // Upload image
+    let imagePath = "";
+    if (req.file) {
+      const uploadDir = path.join(__dirname, `../assets/${role}`);
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+      imagePath = `assets/${role}/${req.file.filename}`;
+      const destinationPath = path.join(uploadDir, req.file.filename);
+      fs.renameSync(req.file.path, destinationPath);
+    }
+
+    // Définir les règles selon le rôle
+    const noRegionNoPV: UserRoleType[] = ["SuperAdmin", "Client"];
+    const onlyRegion: UserRoleType[] = ["AdminRegion"];
+    const needsPointVente: UserRoleType[] = [
+      "AdminPointVente",
+      "Vendeur",
+      "Gerant",
+    ];
+
+    // Validation
+    if (!UserRole.includes(role)) {
+      res.status(400).json({ message: `Rôle invalide : ${role}` });
+      return;
+    }
+
+    if (onlyRegion.includes(role as UserRoleType) && !region) {
+      res
+        .status(400)
+        .json({ message: "La région est requise pour un AdminRegion." });
+      return;
+    }
+
+    if (needsPointVente.includes(role as UserRoleType) && !pointVente) {
+      res
+        .status(400)
+        .json({ message: "Le point de vente est requis pour ce rôle." });
+      return;
+    }
+
+    // Préparation des données utilisateur
+    const userPayload: any = {
+      nom,
+      prenom,
+      telephone,
+      email,
+      adresse,
+      password, // À hasher avec bcrypt en prod
+      role,
+      image: imagePath,
+    };
+
+    if (onlyRegion.includes(role as UserRoleType)) {
+      userPayload.region = region;
+    }
+
+    if (needsPointVente.includes(role as UserRoleType)) {
+      userPayload.pointVente = pointVente;
+    }
+
+    const newUser = new User(userPayload);
+    await newUser.save();
+
     res.status(201).json({ message: "Utilisateur créé avec succès" });
-    return;
   } catch (err: unknown) {
+    console.error("Erreur lors de l'inscription:", err);
     if (err instanceof Error) {
       res
         .status(500)
@@ -53,14 +110,16 @@ export const register = async (req: MulterRequest, res: Response) => {
     } else {
       res.status(500).json({ message: "Une erreur inconnue est survenue" });
     }
-    return;
   }
 };
 
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {
     const { telephone, password } = req.body;
-    const user = await User.findOne({ telephone });
+
+    const user = await User.findOne({ telephone })
+      .populate("pointVente")
+      .populate("region");
 
     if (!user) {
       res.status(401).json({ message: "Numéro de téléphone incorrect" });
@@ -78,7 +137,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     console.log("Utilisateur connecté:", user);
     res.json({ token, user });
   } catch (err) {
-    console.error("Erreur lors du login :", err); // ✅ utile pour diagnostiquer
+    console.error("Erreur lors du login :", err);
     res.status(500).json({ message: "Erreur interne", error: err });
   }
 };

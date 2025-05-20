@@ -15,7 +15,7 @@ const router = express.Router();
 router.get(
   "/",
   authenticate,
-  authorize(["SuperAdmin", "AdminRegion", "AdminPointVente"]),
+  // authorize(["SuperAdmin", "AdminRegion", "AdminPointVente"]),
   getAllCategories,
 );
 router.post(
