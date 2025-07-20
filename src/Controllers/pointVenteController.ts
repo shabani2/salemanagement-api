@@ -13,6 +13,22 @@ export const getAllPointVentes = async (req: Request, res: Response) => {
   }
 };
 
+export const getPointVentesByRegion = async (req: Request, res: Response) => {
+  try {
+    const { regionId } = req.params;
+
+    const pointsVente = await PointVente.find({ region: regionId })
+      .populate("region")
+      //.populate("stock.produit");
+const filteredPointsVente = pointsVente.filter(
+      (point) => point.region?._id?.toString() === regionId,
+    );
+    res.json(filteredPointsVente);
+  } catch (err) {
+    res.status(500).json({ message: "Erreur interne", error: err });
+  }
+};
+
 export const createPointVente = async (req: Request, res: Response) => {
   try {
     const { nom, adresse, region } = req.body;

@@ -3,39 +3,17 @@ import { Request, Response } from "express";
 import { format } from "date-fns";
 import PDFDocument from "pdfkit";
 import path from "path";
-
-interface Organisation {
-  logo: string;
-  nom: string;
-  adresse: string;
-  email: string;
-  siege: string;
-  pays: string;
-}
-
-interface User {
-  nom: string;
-  adresse: string;
-  id: string;
-}
-
-interface Mouvement {
-  produitNom: string;
-  quantite: number;
-  montant: number;
-  type: string;
-  produit: string;
-  depotCentral?: boolean;
-  pointVente?: any;
-  statut: boolean;
-}
-
-interface Destinateur {
-  nom: string;
-  adresse: string;
-}
+import {
+  IMouvementStock,
+  IOrganisation,
+  IUser,
+} from "../Models/interfaceModels";
+import { Produit } from "../Models/model";
 
 const logoPath = path.join(__dirname, "./../assets/default/inaf.png");
+
+
+
 
 export const generateStockPdf = async (req: Request, res: Response) => {
   try {
@@ -47,25 +25,48 @@ export const generateStockPdf = async (req: Request, res: Response) => {
       destinateur,
       serie,
       pointVente,
+      paiement, // Ajoutez ce champ dans le body pour afficher mode et montant
+      remarques, // Ajoutez ce champ pour message personnalisé
+    }: {
+      organisation: IOrganisation;
+      user: IUser;
+      mouvements: IMouvementStock[];
+      type: string;
+      destinateur?: IUser;
+      serie: string;
+      pointVente?: any;
+      paiement?: { mode: string; montant: number };
+      remarques?: string;
     } = req.body;
 
-    const doc = new PDFDocument({
-      margin: 20, // Réduit la marge pour un design plus compact
-      font: "Helvetica", // Spécifiez une police par défaut
-    });
-    const chunks: any[] = [];
+    const allProduits = await Produit.find();
+    // Générer le numéro du document (10 chiffres)
+const today = new Date();
+const datePart = format(today, "yyMMdd");
+let seriePart = "0001";
+if (/^\d+$/.test(serie)) {
+  seriePart = serie.slice(-4).padStart(4, "0");
+} else if (user && user.id) {
+  seriePart = String(user.id).slice(-4).padStart(4, "0");
+}
+const numeroDocument = `${datePart}${seriePart}`;
 
-    const typeMap: Record<string, string> = {
-      Entree: "Bon d'entrée",
+    const doc = new PDFDocument({ margin: 24, font: "Helvetica" });
+    const chunks: Buffer[] = [];
+
+    const typeMap = {
+      Entrée: "Bon d'entrée",
       Sortie: "Bon de sortie",
       Livraison: "Bon de livraison",
       Vente: "Facture",
       Commande: "Bon de commande",
     };
-    const docType = typeMap[type] || "Document";
+
+    type TypeMapKey = keyof typeof typeMap;
+    const docType = typeMap[type as TypeMapKey] || "Document";
     const showTVA = !(type === "Livraison" || type === "Entree");
 
-    doc.on("data", (chunk: any) => chunks.push(chunk));
+    doc.on("data", (chunk) => chunks.push(chunk));
     doc.on("end", () => {
       const result = Buffer.concat(chunks);
       res.setHeader("Content-Type", "application/pdf");
@@ -76,166 +77,269 @@ export const generateStockPdf = async (req: Request, res: Response) => {
       res.send(result);
     });
 
-    // En-tête du document (Logo et Infos Organisation)
-    // Utilisez une fonction pour simplifier l'ajout d'images et de texte
+    // --- En-tête moderne ---
     const drawHeader = () => {
       try {
-        doc.image(logoPath, 20, 20, { fit: [80, 80] }); // Logo à gauche
-      } catch (error) {
-        console.error("Error loading logo:", error);
-        // Gérez l'erreur si le logo ne peut pas être chargé.  Peut-être afficher un placeholder.
-        doc.text("Logo", 20, 20); // Placeholder si le logo ne se charge pas
+        doc.image(logoPath, 24, 24, { fit: [70, 70] });
+      } catch {
+        doc.fontSize(8).text("Logo", 24, 24);
       }
-
       doc
-        .fontSize(10)
-        .text(organisation.nom, 100, 30, { align: "left" }) // Aligné à gauche, à côté du logo
-        .text(organisation.adresse, 100, 45, { align: "left" })
-        .text(organisation.email, 100, 60, { align: "left" })
-        .text(organisation.siege, 100, 75, { align: "left" })
-        .text(organisation.pays, 100, 90, { align: "left" });
+        .fontSize(12)
+        .font("Helvetica-Bold")
+        .text(organisation.nom, 110, 28, { align: "left" })
+        .fontSize(8)
+        .font("Helvetica")
+        .text(`RCCM : ${organisation.rccm}`, 110, 46)
+        .text(`Contact : ${organisation.contact}`, 110, 60)
+        .text(`Adresse : ${organisation.siegeSocial}`, 110, 74)
+        .text(`Pays : ${organisation.pays}`, 110, 88);
+
+      // Bloc informations fiscales
+      if (organisation.idNat || organisation.numeroImpot) {
+        doc
+          .rect(350, 24, 200, 40)
+          .fillAndStroke("#f5f5f5", "#cccccc")
+          .fillColor("#333")
+          .fontSize(8)
+          .text(`idNat : ${organisation.idNat ?? "-"}`, 360, 28)
+          .text(`TVA : ${organisation.numeroImpot ?? "-"}`, 360, 42)
+          .fillColor("black");
+      }
     };
 
-    drawHeader(); // Appelle la fonction pour dessiner l'en-tête
+    drawHeader();
 
-    // Infos sur le document (Type, Date, Série, ID Utilisateur)
-    doc.moveDown(6); // Espacement plus grand après l'en-tête
-    doc.fontSize(10).text(docType, { align: "right" });
-    doc.text(`Date: ${format(new Date(), "dd/MM/yyyy")}`, { align: "right" }); // Format de date plus convivial
-    doc.text(`Série: ${serie}`, { align: "right" });
-    doc.text(`ID Utilisateur: ${user.id}`, { align: "right" });
+    doc.moveDown(3);
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(14)
+      .fillColor("#003366")
+      .text(docType, { align: "right" })
+      .fillColor("black")
+      .font("Helvetica")
+      .fontSize(9);
+    doc.text(`Date : ${format(new Date(), "dd/MM/yyyy HH:mm")}`, { align: "right" });
+    doc.text(`Série : ${serie}`, { align: "right" });
+    // ... après docType, date et série
+doc
+.font("Helvetica-Bold")
+.fontSize(10)
+.fillColor("#003366")
+.text(`Numéro : ${numeroDocument}`, { align: "right" })
+.fillColor("black")
+.font("Helvetica")
+.fontSize(9);
 
-    // Utilisateur et Destinataire
-    doc.moveDown(2);
-    doc.fontSize(10);
-    doc.text(`Utilisateur: ${user.nom}`, 20, doc.y); // Plus près du bord gauche
-    doc.text(`Adresse: ${user.adresse}`, 20, doc.y + 15);
+    doc.text(`ID Utilisateur : ${user.id}`, { align: "right" });
+
+    // --- Bloc informations client/destinataire ---
+    doc.moveDown(1.5);
+    doc.font("Helvetica-Bold").text("Émetteur :", 24, doc.y);
+    doc.font("Helvetica").fontSize(9);
+    doc.text(`${user.nom}`, 24);
+    doc.text(`${user.adresse ?? ""}`, 24);
 
     if (destinateur) {
-      doc.text(`Destinataire: ${destinateur.nom}`, 300, doc.y - 15); // Aligné à droite
-      doc.text(`Adresse: ${destinateur.adresse}`, 300, doc.y);
+      doc.moveDown(0.5);
+      doc.font("Helvetica-Bold").text("Destinataire :", 300, doc.y - 30);
+      doc.font("Helvetica").fontSize(9);
+      doc.text(`${destinateur.nom}`, 300);
+      doc.text(`${destinateur.adresse ?? ""}`, 300);
     }
 
     if (type === "Commande" && pointVente) {
-      doc.text(`Point de Vente: ${pointVente.nom}`, 20, doc.y + 30);
-      doc.text(`Adresse Point de Vente: ${pointVente.adresse}`, 20, doc.y + 45);
+      doc.moveDown(0.5);
+      doc.font("Helvetica-Bold").text("Point de Vente :", 24);
+      doc.font("Helvetica").fontSize(9);
+      doc.text(`${pointVente.nom}`, 24);
+      doc.text(`${pointVente.adresse ?? ""}`, 24);
     }
 
-    doc.moveDown(2);
-
-    // Détail des Produits - En-tête de la table
+    // --- Tableau des produits ---
+    doc.moveDown(1.5);
     doc
-      .fontSize(12)
+      .fontSize(10)
       .font("Helvetica-Bold")
-      .text("Détail des Produits", 20, doc.y, {
+      .text("Détail des Produits", 24, doc.y, {
         underline: true,
         align: "left",
-      }); // Aligné à gauche
+      });
     doc.moveDown(0.5);
 
-    // Table
     const tableTop = doc.y;
     const itemSpacing = 20;
-    const xStart = 20; // Définir le début de la colonne X
+    const xStart = 24;
 
-    doc.fontSize(10);
+    doc.fontSize(8).font("Helvetica");
 
-    // Définir les positions des colonnes
-    const nomProduitX = xStart;
-    const prixUnitaireX = xStart + 150;
-    const quantiteX = xStart + 300;
-    const montantX = xStart + 450;
+    const pageWidth =
+      doc.page.width - doc.page.margins.left - doc.page.margins.right;
+    const colCount = showTVA ? 7 : 4;
+    const colWidth = pageWidth / colCount;
 
-    // Largeurs de colonnes (facultatif, mais utile pour l'alignement)
-    const nomProduitWidth = 140;
-    const prixUnitaireWidth = 100;
-    const quantiteWidth = 80;
-    const montantWidth = 100;
-
-    // Dessiner l'en-tête de la table
-    doc.text("Nom Produit", nomProduitX, tableTop, {
-      width: nomProduitWidth,
-      align: "left",
-    });
-    doc.text("Prix Unitaire", prixUnitaireX, tableTop, {
-      width: prixUnitaireWidth,
-      align: "left",
-    });
-    doc.text("Quantité", quantiteX, tableTop, {
-      width: quantiteWidth,
-      align: "left",
-    });
-    doc.text("Montant", montantX, tableTop, {
-      width: montantWidth,
-      align: "left",
-    });
+    const [
+      nomProduitX,
+      prixUnitaireX,
+      quantiteX,
+      montantX,
+      margeX,
+      tvaX,
+      ttcX,
+    ] = Array.from({ length: colCount }, (_, i) => xStart + i * colWidth);
 
     doc
-      .moveTo(xStart, tableTop - 2)
-      .lineTo(xStart + 530, tableTop - 2)
-      .stroke(); // Ajuster la longueur de la ligne
+      .font("Helvetica-Bold")
+      .text("Nom Produit", nomProduitX, tableTop, { width: colWidth })
+      .text("Prix Unitaire", prixUnitaireX, tableTop, { width: colWidth })
+      .text("Quantité", quantiteX, tableTop, { width: colWidth })
+      .text("Montant", montantX, tableTop, { width: colWidth });
+
+    if (showTVA) {
+      doc
+        .text("Marge", margeX, tableTop, { width: colWidth })
+        .text("TVA", tvaX, tableTop, { width: colWidth })
+        .text("TTC", ttcX, tableTop, { width: colWidth });
+    }
+
     doc
-      .moveTo(xStart, tableTop + 15)
-      .lineTo(xStart + 530, tableTop + 15)
-      .stroke();
+      .moveTo(xStart, tableTop + 12)
+      .lineTo(xStart + pageWidth, tableTop + 12)
+      .strokeColor("#003366")
+      .stroke()
+      .strokeColor("black");
 
     let y = tableTop + itemSpacing;
-    let total = 0;
+    let total = 0,
+      totalTVA = 0,
+      totalMarge = 0,
+      totalHt = 0;
 
-    mouvements.forEach((m: Mouvement) => {
-      const prixUnitaire = m.montant / m.quantite;
-      total += m.montant;
+    for (const m of mouvements) {
+      const produit = allProduits.find(
+        (p) => String(p._id) === String(m.produit),
+      );
+      const marge = produit?.marge ?? 0;
+      const tva = produit?.tva ?? 0;
+      const nomProduit = produit?.nom || "-";
 
-      doc.text(m.produitNom, nomProduitX, y, {
-        width: nomProduitWidth,
-        align: "left",
-      });
-      doc.text(prixUnitaire.toFixed(2), prixUnitaireX, y, {
-        width: prixUnitaireWidth,
-        align: "left",
-      });
-      doc.text(m.quantite.toString(), quantiteX, y, {
-        width: quantiteWidth,
-        align: "left",
-      });
-      doc.text(m.montant.toFixed(2), montantX, y, {
-        width: montantWidth,
-        align: "left",
-      });
+      const prixUnitaire = m.quantite ? m.montant / m.quantite : 0;
+      const quantite = m.quantite;
+      const montant = m.montant;
+      const margeVal = (montant * marge) / 100;
+      const net = montant + margeVal;
+      const tvaVal = (net * tva) / 100;
+      const ttc = net + tvaVal;
+
+      doc
+        .font("Helvetica")
+        .text(nomProduit, nomProduitX, y, { width: colWidth })
+        .text(prixUnitaire.toFixed(2), prixUnitaireX, y, { width: colWidth })
+        .text(quantite.toString(), quantiteX, y, { width: colWidth })
+        .text(montant.toFixed(2), montantX, y, { width: colWidth });
+
+      if (showTVA) {
+        doc
+          .text(margeVal.toFixed(2), margeX, y, { width: colWidth })
+          .text(tvaVal.toFixed(2), tvaX, y, { width: colWidth })
+          .text(ttc.toFixed(2), ttcX, y, { width: colWidth });
+        totalHt += montant;
+        totalMarge += margeVal;
+        totalTVA += tvaVal;
+        total += ttc;
+      } else {
+        total += montant;
+      }
 
       doc
         .moveTo(xStart, y + 15)
-        .lineTo(xStart + 530, y + 15)
-        .stroke();
+        .lineTo(xStart + pageWidth, y + 15)
+        .strokeColor("#e0e0e0")
+        .stroke()
+        .strokeColor("black");
       y += itemSpacing;
-    });
+    }
 
-    // Totaux
+    // --- Résumé financier ---
     doc.moveDown(2);
-    doc.font("Helvetica-Bold");
-    doc.text("Sous-total HT:", 300, y + 10, { continued: true, align: "left" });
-    doc.text(`${total.toFixed(2)} FC`, 400, y + 10, { align: "left" });
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(9)
+      .text("Résumé Financier", 24, y + 10, { underline: true });
+
+    let resumeY = y + 30;
+    doc.font("Helvetica").fontSize(8);
+
+    doc.text("Sous-total HT :", 24, resumeY, { continued: true });
+    doc.text(`${totalHt.toFixed(2)} FC`, 120, resumeY);
 
     if (showTVA) {
-      const totalTVA = total * 0.2;
-      const net = total + totalTVA;
+      doc.text("Total Marge :", 24, resumeY + 15, { continued: true });
+      doc.text(`${totalMarge.toFixed(2)} FC`, 120, resumeY + 15);
 
-      doc.text("TVA (20%):", 300, y + 30, { continued: true, align: "left" });
-      doc.text(`${totalTVA.toFixed(2)} FC`, 400, y + 30, { align: "left" });
+      doc.text("Total TVA :", 24, resumeY + 30, { continued: true });
+      doc.text(`${totalTVA.toFixed(2)} FC`, 120, resumeY + 30);
 
-      doc.text("Net à payer:", 300, y + 50, { continued: true, align: "left" });
-      doc.text(`${net.toFixed(2)} FC`, 400, y + 50, { align: "left" });
+      doc
+        .font("Helvetica-Bold")
+        .text("Montant TTC :", 24, resumeY + 45, { continued: true });
+      doc.text(`${total.toFixed(2)} FC`, 120, resumeY + 45);
     } else {
-      doc.text("Montant à payer:", 300, y + 30, {
-        continued: true,
-        align: "left",
-      });
-      doc.text(`${total.toFixed(2)} FC`, 400, y + 30, { align: "left" });
+      doc
+        .font("Helvetica-Bold")
+        .text("Montant à payer :", 24, resumeY + 15, { continued: true });
+      doc.text(`${total.toFixed(2)} FC`, 120, resumeY + 15);
     }
+
+    // --- Bloc paiement ---
+    if (paiement) {
+      doc.moveDown(1.5);
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(9)
+        .text("Paiement", 24, doc.y, { underline: true });
+      doc.font("Helvetica").fontSize(8);
+      doc.text(`Mode : ${paiement.mode}`, 24);
+      doc.text(`Montant payé : ${paiement.montant.toFixed(2)} FC`, 24);
+    }
+
+    // --- Bloc remarques/messages personnalisés ---
+    if (remarques) {
+      doc.moveDown(1.5);
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(9)
+        .text("Remarques", 24, doc.y, { underline: true });
+      doc.font("Helvetica").fontSize(8);
+      doc.text(remarques, 24);
+    }
+
+    // // --- Mentions légales et CGV ---
+    // doc.moveDown(2);
+    // doc
+    //   .font("Helvetica")
+    //   .fontSize(7)
+    //   .fillColor("#666")
+    //   .text(
+    //     "Conditions générales de vente et politique de retour disponibles sur demande. Pour toute réclamation, contactez le service client. Ce document fait office de preuve d’achat. Merci pour votre confiance.",
+    //     { align: "center" },
+    //   )
+    //   .fillColor("black");
+
+    // --- Zone signature (optionnelle) ---
+    doc.moveDown(2);
+    doc
+      .font("Helvetica")
+      .fontSize(8)
+      .text("Signature vendeur :", 24, doc.y + 8)
+      .text("Signature client :", 300, doc.y);
+
+    // --- QR code ou code-barres (optionnel, nécessite une lib externe) ---
+    // Vous pouvez intégrer un QR code ici avec une lib comme 'qr-image' ou 'bwip-js'
 
     doc.end();
   } catch (err) {
-    console.error("PDF generation error:", err); // Log l'erreur pour le débogage
+    console.error("PDF generation error:", err);
     res
       .status(500)
       .json({ message: "Erreur lors de la génération du PDF", error: err });

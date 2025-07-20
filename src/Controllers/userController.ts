@@ -30,8 +30,18 @@ export const getUsersByRegion = async (
 ) => {
   try {
     const { regionId } = req.user;
-    const users = await User.find({ region: regionId });
-    res.json(users);
+    const users = await User.find({ region: regionId })
+      .populate({
+        path: "pointVente",
+        populate: { path: "region" },
+      })
+      .populate("region");
+    const filteredUsers = users.filter(
+      (user) =>
+        user.region?._id?.toString() === regionId ||
+        (user.pointVente && (user.pointVente as any).region?._id?.toString() === regionId),
+    );
+    res.json(filteredUsers);
   } catch (err) {
     res.status(500).json({ message: "Erreur interne", error: err });
   }

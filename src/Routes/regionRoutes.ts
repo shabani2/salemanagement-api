@@ -6,6 +6,7 @@ import {
   deleteRegion,
   getAllRegions,
   getRegionById,
+  updateRegion,
 } from "../Controllers/regionController";
 
 const router = express.Router();
@@ -27,6 +28,12 @@ router.delete(
   authenticate,
   authorize(["SuperAdmin", "AdminRegion"]),
   deleteRegion,
+);
+router.put(
+  "/:id",
+  authenticate,
+  authorize(["SuperAdmin", "AdminRegion"]),
+  updateRegion
 );
 router.delete(
   "/:id",

@@ -6,18 +6,52 @@ import { Types } from "mongoose";
 export const getAllStocks = async (req: Request, res: Response) => {
   try {
     const stocks = await Stock.find()
-      .sort({ createdAt: -1 }) // tri décroissant par date de création
+      .sort({ createdAt: -1 })
       .populate({
         path: "produit",
-        populate: {
-          path: "categorie",
-          model: "Categorie",
-        },
+        populate: { path: "categorie", model: "Categorie" },
       })
-      .populate("pointVente");
+      .populate({
+        path: "pointVente",
+        populate: { path: "region", model: "Region" },
+      })
+    .populate("region");
+
     res.json(stocks);
+    return
   } catch (err) {
     res.status(500).json({ message: "Erreur interne", error: err });
+    return
+  }
+};
+
+export const getStocksByRegion = async (req: Request, res: Response) => {
+  try {
+    const { regionId } = req.params;
+
+    const stocks = await Stock.find()
+      .sort({ createdAt: -1 })
+      
+      .populate({
+        path: "produit",
+        populate: { path: "categorie", model: "Categorie" },
+      })
+      .populate({
+        path: "pointVente",
+        populate: { path: "region", model: "Region" },
+      })
+    .populate("region");
+
+    const stocksFiltrés = stocks.filter(
+      (s: any) => s.pointVente?.region?._id?.toString() === regionId ||
+      (s.region?._id?.toString() === regionId)
+    );
+
+    res.json(stocksFiltrés);
+    return;
+  } catch (err) {
+    res.status(500).json({ message: "Erreur interne", error: err });
+    return;
   }
 };
 
@@ -27,45 +61,57 @@ export const getStocksByPointVente = async (req: Request, res: Response) => {
 
     if (!pointVenteId) {
       res.status(400).json({ message: "ID du point de vente requis" });
+      return
     }
 
     const stocks = await Stock.find({ pointVente: pointVenteId })
       .sort({ createdAt: -1 })
       .populate({
         path: "produit",
-        populate: {
-          path: "categorie",
-          model: "Categorie",
-        },
+        populate: { path: "categorie", model: "Categorie" },
       })
-      .populate("pointVente");
+      .populate({
+        path: "pointVente",
+        populate: { path: "region", model: "Region" },
+      })
+    .populate("region");
 
     res.json(stocks);
-    return;
+    return
   } catch (err) {
     res.status(500).json({ message: "Erreur interne", error: err });
-    return;
+    return
   }
 };
 
-// 🔹 Obtenir un stock par ID
 export const getStockById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+
     const stock = await Stock.findById(id)
-      .populate("produit")
-      .populate("pointVente");
+      .populate({
+        path: "produit",
+        populate: { path: "categorie", model: "Categorie" },
+      })
+      .populate({
+        path: "pointVente",
+        populate: { path: "region", model: "Region" },
+      })
+    .populate("region");
 
     if (!stock) {
       res.status(404).json({ message: "Stock non trouvé" });
-      return;
+      return
     }
 
     res.json(stock);
+    return
   } catch (err) {
     res.status(500).json({ message: "Erreur interne", error: err });
+    return
   }
 };
+
 
 // 🔹 Créer un stock
 export const createStock = async (req: Request, res: Response) => {

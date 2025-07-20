@@ -17,6 +17,11 @@ import mouvementStockRoute from "./Routes/mouvementStockRoute";
 import stockRouter from "./Routes/stockRoutes";
 import organisationRoutes from "./Routes/organisationRoutes";
 import pdfRouter from "./Routes/pdfRouter";
+import exportRouter from "./Routes/exportRouter";
+import { currencyRouter, discountRouter, exchangeRateRouter, financialSettingsRouter } from "./Routes/FinanceRoutes";
+import commandeProduitRouter from "./Routes/commandeProduitRoutes";
+import commandeRouter from "./Routes/commandeRoutes";
+
 
 dotenv.config();
 const app = express();
@@ -46,8 +51,8 @@ export const corsOptions: cors.CorsOptions = {
 app.use(cors(corsOptions));
 
 // 🛠 Middleware JSON (après CORS)
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '20mb' }));
+app.use(express.urlencoded({ limit: '20mb', extended: true }));
 
 // 🔥 Vérifier que les requêtes OPTIONS passent bien
 app.options("*", cors(corsOptions)); // Autoriser les préflight requests
@@ -82,8 +87,8 @@ app.use(
   express.static(path.join(__dirname, "assets/Client")),
 );
 app.use(
-  "/assets/Gerant",
-  express.static(path.join(__dirname, "assets/Gerant")),
+  "/assets/Logisticien",
+  express.static(path.join(__dirname, "assets/Logisticien")),
 );
 app.use(
   "/assets/organisations",
@@ -102,6 +107,23 @@ app.use("/point-ventes", pointVenteRoutes);
 app.use("/mouvementStock", mouvementStockRoute);
 app.use("/stock", stockRouter);
 app.use("/generatePdf", pdfRouter);
+
+// Finance routes
+app.use('/finance/currencies', currencyRouter);
+app.use('/finance/exchange-rates', exchangeRateRouter);
+app.use('/finance/discounts', discountRouter);
+app.use('/finance/settings', financialSettingsRouter);
+
+//routes pour les commandes 
+app.use("/api/commandes", commandeRouter);
+app.use("/api/commande-produits", commandeProduitRouter);
+// routes pour les exports
+app.use("/export", exportRouter);
+
+
+app.get("/", (_req, res) => {
+  res.send("Bienvenue sur notre API de la gestion de vente");
+});
 
 // Test CORS directement
 app.get("/test-cors", (req, res) => {

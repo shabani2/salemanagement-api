@@ -23,6 +23,12 @@ usersRouter.get(
   authorize(["SuperAdmin", "AdminRegion", "AdminPointVente"]),
   getUsersByPointVente,
 );
+usersRouter.get(
+  "/region/:regionId",
+  authenticate,
+  authorize(["SuperAdmin", "AdminRegion"]),
+  getUsersByRegion,
+);
 
 usersRouter.get("/", authenticate, authorize(["SuperAdmin"]), getAllUsers);
 usersRouter.get("/users", getAllUsers);
