@@ -54,7 +54,7 @@ export const register = async (
     const needsPointVente: UserRoleType[] = [
       "AdminPointVente",
       "Vendeur",
-      "Gerant",
+      "Logisticien",
     ];
 
     // Validation

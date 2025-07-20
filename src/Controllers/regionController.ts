@@ -52,6 +52,32 @@ export const createRegion = async (req: Request, res: Response) => {
   }
 };
 
+export const updateRegion = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { nom, ville } = req.body;
+
+    // Mise à jour de la région avec validation et retour du document modifié
+    const updated = await Region.findByIdAndUpdate(
+      id,
+      { nom, ville },
+      { new: true, runValidators: true }
+    );
+
+    if (!updated) {
+      
+      res.status(404).json({ message: 'Région non trouvée' });
+      return
+    }
+
+    res.json(updated);
+    return;
+  } catch (err: any) {
+    res.status(400).json({ message: 'Erreur lors de la mise à jour', error: err.message });
+    return
+  }
+};
+
 export const deleteRegion = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;

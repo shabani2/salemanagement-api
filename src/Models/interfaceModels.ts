@@ -3,6 +3,7 @@ import { UserRoleType } from "./model";
 
 // Modèle Utilisateur
 export interface IUser extends Document {
+  id?: string;
   nom: string;
   prenom: string;
   telephone: string;
@@ -30,6 +31,7 @@ export interface IProduit {
   categorie: mongoose.Types.ObjectId;
   prix: number;
   marge?: number;
+  seuil?: number;
   netTopay?: number;
   prixVente: number;
   tva: number;
@@ -73,20 +75,23 @@ export interface ILivraison extends Document {
 }
 
 // Modèle Commande Client
-export interface ICommande extends Document {
-  client: mongoose.Types.ObjectId;
-  produits: { produit: mongoose.Types.ObjectId; quantite: number }[];
-  totalHT: Number;
-  totalTVA: Number;
-  totalTTC: Number;
-  statut: "En Attente" | "En Cours" | "Livrée";
-}
+// export interface ICommande extends Document {
+//   client: mongoose.Types.ObjectId;
+//   produits: { produit: mongoose.Types.ObjectId; quantite: number }[];
+//   totalHT: Number;
+//   totalTVA: Number;
+//   totalTTC: Number;
+//   statut: "En Attente" | "En Cours" | "Livrée";
+// }
 
 // Modèle MouvementStock
 export interface IMouvementStock extends Document {
   pointVente?: mongoose.Types.ObjectId;
   depotCentral?: Boolean;
+  commandeId?: mongoose.Types.ObjectId; // Nullable
+  region?: mongoose.Types.ObjectId;
   produit: mongoose.Types.ObjectId;
+  user: mongoose.Types.ObjectId;
   type: "Entrée" | "Sortie" | "Vente" | "Livraison" | "Commande";
   quantite: number;
   montant: number;
@@ -98,10 +103,15 @@ export interface IStock extends Document {
   quantite: number;
   montant: number;
   pointVente?: mongoose.Types.ObjectId | IPointVente;
+  region?: mongoose.Types.ObjectId | IRegion;
   depotCentral: boolean;
 }
 
 export interface IOrganisation extends Document {
+  numeroImpot: string;
+  idNat: string;  
+  email: any;
+  numeroTVA: any; 
   nom: string;
   rccm: string;
   contact: string;
@@ -113,4 +123,28 @@ export interface IOrganisation extends Document {
   emailEntreprise: string;
   createdAt: Date;
   updatedAt: Date;
+}
+
+
+
+export interface ICommandeProduit {
+  produit: mongoose.Types.ObjectId;
+  quantite: number;
+  statut: 'attente' | 'livré' | 'annulé';
+  mouvementStockId?: mongoose.Types.ObjectId; // Nullable, rempli quand livré
+}
+
+
+
+
+export interface ICommande extends Document {
+  numero: string;
+  user: mongoose.Types.ObjectId;
+  region?: mongoose.Types.ObjectId;
+  pointVente?: mongoose.Types.ObjectId;
+  depotCentral?: boolean;
+  statut: 'attente' | 'livrée' | 'annulée';
+  produits: ICommandeProduit[];
+  createdAt?: Date;
+  updatedAt?: Date;
 }

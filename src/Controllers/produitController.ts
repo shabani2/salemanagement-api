@@ -1,5 +1,4 @@
 // controllers/produitController.ts
-
 import { Request, Response } from "express";
 import { Produit } from "../Models/model";
 
@@ -38,7 +37,7 @@ export const getProduitById = async (
 // 🔹 Créer un produit
 export const createProduit = async (req: Request, res: Response) => {
   try {
-    const { nom, categorie, prix, tva, prixVente, marge, netTopay, unite } =
+    const { nom, categorie, prix, tva, prixVente, marge, netTopay, unite, seuil } =
       req.body;
 
     const produit = new Produit({
@@ -50,6 +49,7 @@ export const createProduit = async (req: Request, res: Response) => {
       marge,
       netTopay,
       unite,
+      seuil,
     });
     await produit.save();
     res.status(201).json(produit);
@@ -75,6 +75,7 @@ export const updateProduit = async (
       marge: number;
       netTopay: number;
       unite: string;
+      seuil: number;
     }> = req.body;
 
     const updatedProduit = await Produit.findByIdAndUpdate(id, updateData, {

@@ -6,6 +6,11 @@ import {
   updateMouvementStock,
   deleteMouvementStock,
   getMouvementsStockByPointVente,
+  getMouvementStockByRegion,
+  getMouvementsStockByPointVenteId,
+  getMouvementsStockByUserId,
+  getMouvementsStockAggregatedByUserId,
+  getMouvementsStockAggregatedByPointVente,
 } from "../Controllers/mouvementStockController";
 import { authenticate } from "../Middlewares/auth";
 import { validateState } from "../Controllers/mouvementStockController";
@@ -18,6 +23,31 @@ mvtStockrouter.get(
   "/by-point-vente/:pointVenteId",
   authenticate,
   getMouvementsStockByPointVente,
+);
+mvtStockrouter.get(
+  "/by-point-vente/page/:pointVenteId",
+  authenticate,
+  getMouvementsStockByPointVenteId
+);
+mvtStockrouter.get(
+  "/by-point-vente/aggregate/:pointVenteId",
+  authenticate,
+  getMouvementsStockAggregatedByPointVente
+);
+mvtStockrouter.get(
+  "/byUser/:userId",
+  authenticate,
+  getMouvementsStockByUserId
+);
+mvtStockrouter.get(
+  "/byUser/aggregate/:userId",
+  authenticate,
+  getMouvementsStockAggregatedByUserId
+);
+mvtStockrouter.get(
+  "/region/:regionId",
+  authenticate,
+  getMouvementStockByRegion,
 );
 mvtStockrouter.post("/", authenticate, createMouvementStock);
 mvtStockrouter.put("/:id", authenticate, updateMouvementStock);
