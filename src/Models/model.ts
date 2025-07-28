@@ -106,7 +106,6 @@ const StockSchema = new Schema<IStock>(
   { timestamps: true },
 );
 
-
 CategorieSchema.pre("findOneAndDelete", async function (next) {
   try {
     const categorie = this.getQuery()._id;
@@ -126,7 +125,7 @@ const MouvementStockSchema = new Schema<IMouvementStock>(
     },
     commandeId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Commande',
+      ref: "Commande",
       default: null,
     },
     region: {
@@ -155,7 +154,6 @@ const MouvementStockSchema = new Schema<IMouvementStock>(
 
 // PRE-SAVE VALIDATION
 
-
 MouvementStockSchema.pre("save", async function (next) {
   try {
     const { type, statut, produit, quantite, pointVente, region } = this;
@@ -168,12 +166,16 @@ MouvementStockSchema.pre("save", async function (next) {
       if (region) {
         const regionStock = await Stock.findOne({ produit, region });
         if (!regionStock || regionStock.quantite < quantite) {
-          return next(new Error("Stock insuffisant dans la région pour la livraison"));
+          return next(
+            new Error("Stock insuffisant dans la région pour la livraison"),
+          );
         }
       } else {
         const depotStock = await Stock.findOne({ produit, depotCentral: true });
         if (!depotStock || depotStock.quantite < quantite) {
-          return next(new Error("Stock insuffisant au dépôt central pour la livraison"));
+          return next(
+            new Error("Stock insuffisant au dépôt central pour la livraison"),
+          );
         }
       }
       return next();
@@ -183,7 +185,9 @@ MouvementStockSchema.pre("save", async function (next) {
       if (region) {
         const regionStock = await Stock.findOne({ produit, region });
         if (!regionStock || regionStock.quantite < quantite) {
-          return next(new Error("Stock insuffisant dans la région pour l'opération"));
+          return next(
+            new Error("Stock insuffisant dans la région pour l'opération"),
+          );
         }
       } else {
         const pointStock = await Stock.findOne({ produit, pointVente });
@@ -199,13 +203,12 @@ MouvementStockSchema.pre("save", async function (next) {
   }
 });
 
-
 // POST-SAVE LOGIC
-
 
 MouvementStockSchema.post("save", async function (doc) {
   try {
-    const { produit, quantite, type, statut, pointVente, montant, region } = doc;
+    const { produit, quantite, type, statut, pointVente, montant, region } =
+      doc;
 
     interface AdjustStockFilter {
       produit: mongoose.Types.ObjectId;
@@ -220,7 +223,7 @@ MouvementStockSchema.post("save", async function (doc) {
     const adjustStock = async (
       filter: AdjustStockFilter,
       qtyChange: QtyChange,
-      montantChange: MontantChange
+      montantChange: MontantChange,
     ): Promise<void> => {
       try {
         await Stock.findOneAndUpdate(
@@ -233,7 +236,7 @@ MouvementStockSchema.post("save", async function (doc) {
             upsert: true,
             new: true,
             setDefaultsOnInsert: true,
-          }
+          },
         );
       } catch (err) {
         console.error("Erreur ajustement stock:", err);
@@ -278,7 +281,6 @@ MouvementStockSchema.post("save", async function (doc) {
   }
 });
 
-
 UserSchema.pre("save", async function (next) {
   try {
     if (!this.isModified("password")) return next();
@@ -322,7 +324,7 @@ const OrganisationSchema = new Schema<IOrganisation>(
   {
     nom: { type: String, required: true },
     idNat: { type: String, required: true },
-    contact: { type: String, required: true },    
+    contact: { type: String, required: true },
     numeroImpot: { type: String, required: true },
     logo: { type: String },
     devise: { type: String, required: true },
@@ -338,14 +340,11 @@ export const Organisations = mongoose.model<IOrganisation>(
   OrganisationSchema,
 );
 
-
-
-
 export const CommandeProduitSchema = new Schema<ICommandeProduit>(
   {
     produit: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Produit',
+      ref: "Produit",
       required: true,
     },
     quantite: {
@@ -354,21 +353,21 @@ export const CommandeProduitSchema = new Schema<ICommandeProduit>(
     },
     statut: {
       type: String,
-      enum: ['attente', 'livré', 'annulé'],
-      default: 'attente',
+      enum: ["attente", "livré", "annulé"],
+      default: "attente",
     },
     mouvementStockId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'MouvementStock',
+      ref: "MouvementStock",
       default: null,
     },
   },
-  { _id: false }
+  { _id: false },
 );
-export const CommandeProduit = mongoose.model<ICommandeProduit>("CommandeProduit", CommandeProduitSchema);
-
-
-
+export const CommandeProduit = mongoose.model<ICommandeProduit>(
+  "CommandeProduit",
+  CommandeProduitSchema,
+);
 
 const CommandeSchema = new Schema<ICommande>(
   {
@@ -379,16 +378,16 @@ const CommandeSchema = new Schema<ICommande>(
     },
     user: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      ref: "User",
       required: true,
     },
     region: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Region',
+      ref: "Region",
     },
     pointVente: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'PointVente',
+      ref: "PointVente",
     },
     depotCentral: {
       type: Boolean,
@@ -396,13 +395,12 @@ const CommandeSchema = new Schema<ICommande>(
     },
     statut: {
       type: String,
-      enum: ['attente', 'livrée', 'annulée'],
-      default: 'attente',
+      enum: ["attente", "livrée", "annulée"],
+      default: "attente",
     },
     produits: [CommandeProduitSchema],
   },
-  { timestamps: true }
+  { timestamps: true },
 );
-
 
 export const Commande = mongoose.model<ICommande>("Commande", CommandeSchema);

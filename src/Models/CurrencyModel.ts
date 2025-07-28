@@ -1,6 +1,5 @@
 // src/models/exchangeRate.model.ts
-import mongoose, { Schema } from 'mongoose';
-
+import mongoose, { Schema } from "mongoose";
 
 export interface ICurrency {
   code: string; // EUR, USD, CDF
@@ -14,14 +13,12 @@ const CurrencySchema = new Schema<ICurrency>(
     code: { type: String, required: true, unique: true, uppercase: true },
     name: { type: String, required: true },
     symbol: { type: String, required: true },
-    isBase: { type: Boolean, default: false }
+    isBase: { type: Boolean, default: false },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
-export const Currency = mongoose.model<ICurrency>('Currency', CurrencySchema);
-
-
+export const Currency = mongoose.model<ICurrency>("Currency", CurrencySchema);
 
 export interface IExchangeRate {
   baseCurrency: mongoose.Types.ObjectId;
@@ -33,30 +30,31 @@ export interface IExchangeRate {
 
 const ExchangeRateSchema = new Schema<IExchangeRate>(
   {
-    baseCurrency: { 
-      type: Schema.Types.ObjectId, 
-      ref: 'Currency', 
-      required: true 
+    baseCurrency: {
+      type: Schema.Types.ObjectId,
+      ref: "Currency",
+      required: true,
     },
-    targetCurrency: { 
-      type: Schema.Types.ObjectId, 
-      ref: 'Currency', 
-      required: true 
+    targetCurrency: {
+      type: Schema.Types.ObjectId,
+      ref: "Currency",
+      required: true,
     },
     rate: { type: Number, required: true },
     effectiveDate: { type: Date, required: true },
-    expirationDate: { type: Date }
+    expirationDate: { type: Date },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
-export const ExchangeRate = mongoose.model<IExchangeRate>('ExchangeRate', ExchangeRateSchema);
-
-
+export const ExchangeRate = mongoose.model<IExchangeRate>(
+  "ExchangeRate",
+  ExchangeRateSchema,
+);
 
 export enum DiscountType {
-  PERCENTAGE = 'PERCENTAGE',
-  FIXED_AMOUNT = 'FIXED_AMOUNT',
+  PERCENTAGE = "PERCENTAGE",
+  FIXED_AMOUNT = "FIXED_AMOUNT",
 }
 
 export interface IDiscount {
@@ -68,7 +66,7 @@ export interface IDiscount {
   endDate?: Date;
   maxAmount?: number;
   minPurchase?: number;
-  appliesTo: 'ALL' | 'CATEGORY' | 'PRODUCT';
+  appliesTo: "ALL" | "CATEGORY" | "PRODUCT";
   targetIds?: mongoose.Types.ObjectId[];
   isActive: boolean;
 }
@@ -77,30 +75,28 @@ const DiscountSchema = new Schema<IDiscount>(
   {
     name: { type: String, required: true },
     code: { type: String, required: true, unique: true },
-    type: { 
-      type: String, 
-      enum: Object.values(DiscountType), 
-      required: true 
+    type: {
+      type: String,
+      enum: Object.values(DiscountType),
+      required: true,
     },
     value: { type: Number, required: true },
     startDate: { type: Date, required: true },
     endDate: { type: Date },
     maxAmount: { type: Number },
     minPurchase: { type: Number },
-    appliesTo: { 
-      type: String, 
-      enum: ['ALL', 'CATEGORY', 'PRODUCT'], 
-      default: 'ALL' 
+    appliesTo: {
+      type: String,
+      enum: ["ALL", "CATEGORY", "PRODUCT"],
+      default: "ALL",
     },
     targetIds: [{ type: Schema.Types.ObjectId }],
-    isActive: { type: Boolean, default: true }
+    isActive: { type: Boolean, default: true },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
-export const Discount = mongoose.model<IDiscount>('Discount', DiscountSchema);
-
-
+export const Discount = mongoose.model<IDiscount>("Discount", DiscountSchema);
 
 export interface IFinancialSettings {
   defaultCurrency: mongoose.Types.ObjectId;
@@ -112,20 +108,23 @@ export interface IFinancialSettings {
 
 const FinancialSettingsSchema = new Schema<IFinancialSettings>(
   {
-    defaultCurrency: { 
-      type: Schema.Types.ObjectId, 
-      ref: 'Currency', 
-      required: true 
+    defaultCurrency: {
+      type: Schema.Types.ObjectId,
+      ref: "Currency",
+      required: true,
     },
     taxRate: { type: Number, required: true },
     loyaltyPointsRatio: { type: Number, required: true },
     invoiceDueDays: { type: Number, required: true },
-    latePaymentFee: { type: Number, required: true }
+    latePaymentFee: { type: Number, required: true },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 // Singleton pattern for financial settings
 FinancialSettingsSchema.index({}, { unique: true });
 
-export const FinancialSettings = mongoose.model<IFinancialSettings>('FinancialSettings', FinancialSettingsSchema);
+export const FinancialSettings = mongoose.model<IFinancialSettings>(
+  "FinancialSettings",
+  FinancialSettingsSchema,
+);

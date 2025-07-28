@@ -109,9 +109,9 @@ export interface IStock extends Document {
 
 export interface IOrganisation extends Document {
   numeroImpot: string;
-  idNat: string;  
+  idNat: string;
   email: any;
-  numeroTVA: any; 
+  numeroTVA: any;
   nom: string;
   rccm: string;
   contact: string;
@@ -125,17 +125,12 @@ export interface IOrganisation extends Document {
   updatedAt: Date;
 }
 
-
-
 export interface ICommandeProduit {
   produit: mongoose.Types.ObjectId;
   quantite: number;
-  statut: 'attente' | 'livré' | 'annulé';
+  statut: "attente" | "livré" | "annulé";
   mouvementStockId?: mongoose.Types.ObjectId; // Nullable, rempli quand livré
 }
-
-
-
 
 export interface ICommande extends Document {
   numero: string;
@@ -143,7 +138,7 @@ export interface ICommande extends Document {
   region?: mongoose.Types.ObjectId;
   pointVente?: mongoose.Types.ObjectId;
   depotCentral?: boolean;
-  statut: 'attente' | 'livrée' | 'annulée';
+  statut: "attente" | "livrée" | "annulée";
   produits: ICommandeProduit[];
   createdAt?: Date;
   updatedAt?: Date;

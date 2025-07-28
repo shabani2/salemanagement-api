@@ -17,10 +17,11 @@ export const getPointVentesByRegion = async (req: Request, res: Response) => {
   try {
     const { regionId } = req.params;
 
-    const pointsVente = await PointVente.find({ region: regionId })
-      .populate("region")
-      //.populate("stock.produit");
-const filteredPointsVente = pointsVente.filter(
+    const pointsVente = await PointVente.find({ region: regionId }).populate(
+      "region",
+    );
+    //.populate("stock.produit");
+    const filteredPointsVente = pointsVente.filter(
       (point) => point.region?._id?.toString() === regionId,
     );
     res.json(filteredPointsVente);

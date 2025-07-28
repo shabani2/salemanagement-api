@@ -18,14 +18,16 @@ export const searchProduit = async (req: Request, res: Response) => {
 
   try {
     const produits = await Produit.find({
-      nom: { $regex: q, $options: 'i' }, // recherche insensible à la casse
+      nom: { $regex: q, $options: "i" }, // recherche insensible à la casse
     })
       .sort({ createdAt: -1 })
-      .populate('categorie');
+      .populate("categorie");
 
     res.json(produits);
   } catch (err) {
-    res.status(500).json({ message: 'Erreur lors de la recherche', error: err });
+    res
+      .status(500)
+      .json({ message: "Erreur lors de la recherche", error: err });
   }
 };
 // 🔹 Obtenir un produit par ID
@@ -51,8 +53,17 @@ export const getProduitById = async (
 // 🔹 Créer un produit
 export const createProduit = async (req: Request, res: Response) => {
   try {
-    const { nom, categorie, prix, tva, prixVente, marge, netTopay, unite, seuil } =
-      req.body;
+    const {
+      nom,
+      categorie,
+      prix,
+      tva,
+      prixVente,
+      marge,
+      netTopay,
+      unite,
+      seuil,
+    } = req.body;
 
     const produit = new Produit({
       nom,

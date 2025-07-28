@@ -15,13 +15,13 @@ export const getAllStocks = async (req: Request, res: Response) => {
         path: "pointVente",
         populate: { path: "region", model: "Region" },
       })
-    .populate("region");
+      .populate("region");
 
     res.json(stocks);
-    return
+    return;
   } catch (err) {
     res.status(500).json({ message: "Erreur interne", error: err });
-    return
+    return;
   }
 };
 
@@ -31,7 +31,7 @@ export const getStocksByRegion = async (req: Request, res: Response) => {
 
     const stocks = await Stock.find()
       .sort({ createdAt: -1 })
-      
+
       .populate({
         path: "produit",
         populate: { path: "categorie", model: "Categorie" },
@@ -40,11 +40,12 @@ export const getStocksByRegion = async (req: Request, res: Response) => {
         path: "pointVente",
         populate: { path: "region", model: "Region" },
       })
-    .populate("region");
+      .populate("region");
 
     const stocksFiltrés = stocks.filter(
-      (s: any) => s.pointVente?.region?._id?.toString() === regionId ||
-      (s.region?._id?.toString() === regionId)
+      (s: any) =>
+        s.pointVente?.region?._id?.toString() === regionId ||
+        s.region?._id?.toString() === regionId,
     );
 
     res.json(stocksFiltrés);
@@ -61,7 +62,7 @@ export const getStocksByPointVente = async (req: Request, res: Response) => {
 
     if (!pointVenteId) {
       res.status(400).json({ message: "ID du point de vente requis" });
-      return
+      return;
     }
 
     const stocks = await Stock.find({ pointVente: pointVenteId })
@@ -74,13 +75,13 @@ export const getStocksByPointVente = async (req: Request, res: Response) => {
         path: "pointVente",
         populate: { path: "region", model: "Region" },
       })
-    .populate("region");
+      .populate("region");
 
     res.json(stocks);
-    return
+    return;
   } catch (err) {
     res.status(500).json({ message: "Erreur interne", error: err });
-    return
+    return;
   }
 };
 
@@ -97,21 +98,20 @@ export const getStockById = async (req: Request, res: Response) => {
         path: "pointVente",
         populate: { path: "region", model: "Region" },
       })
-    .populate("region");
+      .populate("region");
 
     if (!stock) {
       res.status(404).json({ message: "Stock non trouvé" });
-      return
+      return;
     }
 
     res.json(stock);
-    return
+    return;
   } catch (err) {
     res.status(500).json({ message: "Erreur interne", error: err });
-    return
+    return;
   }
 };
-
 
 // 🔹 Créer un stock
 export const createStock = async (req: Request, res: Response) => {
