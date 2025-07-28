@@ -138,8 +138,8 @@ app.use(errorHandler);
 
 // 🔥 Lancement du serveur
 const Port = process.env.PORT || 8000;
-app.listen(Port, () => console.log(`🚀 Server is running on port ${Port}`));
-app.use(morgan("dev"));
+//app.listen(Port, () => console.log(`🚀 Server is running on port ${Port}`));
+//app.use(morgan("dev"));
 console.log("🚀 Express app initialisée");
 
 export default app;

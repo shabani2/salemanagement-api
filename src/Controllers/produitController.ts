@@ -13,7 +13,21 @@ export const getAllProduits = async (req: Request, res: Response) => {
     res.status(500).json({ message: "Erreur interne", error: err });
   }
 };
+export const searchProduit = async (req: Request, res: Response) => {
+  const { q } = req.query; // q pour "query"
 
+  try {
+    const produits = await Produit.find({
+      nom: { $regex: q, $options: 'i' }, // recherche insensible à la casse
+    })
+      .sort({ createdAt: -1 })
+      .populate('categorie');
+
+    res.json(produits);
+  } catch (err) {
+    res.status(500).json({ message: 'Erreur lors de la recherche', error: err });
+  }
+};
 // 🔹 Obtenir un produit par ID
 export const getProduitById = async (
   req: Request,

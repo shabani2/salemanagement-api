@@ -11,8 +11,8 @@ const getDatabaseUri = (): string => {
   switch (env) {
     case "production":
       return process.env.MONGO_URI_PROD || throwMissingEnv("MONGO_URI_PROD");
-    case "test":
-      return process.env.MONGO_URI_TEST || throwMissingEnv("MONGO_URI_TEST");
+    case "development":
+      return process.env.MONGO_URI_DEV || throwMissingEnv("MONGO_URI_DEV");
     default:
       return process.env.MONGO_URI_LOCAL || throwMissingEnv("MONGO_URI_LOCAL");
   }
