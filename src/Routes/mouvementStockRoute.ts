@@ -27,22 +27,18 @@ mvtStockrouter.get(
 mvtStockrouter.get(
   "/by-point-vente/page/:pointVenteId",
   authenticate,
-  getMouvementsStockByPointVenteId
+  getMouvementsStockByPointVenteId,
 );
 mvtStockrouter.get(
   "/by-point-vente/aggregate/:pointVenteId",
   authenticate,
-  getMouvementsStockAggregatedByPointVente
+  getMouvementsStockAggregatedByPointVente,
 );
-mvtStockrouter.get(
-  "/byUser/:userId",
-  authenticate,
-  getMouvementsStockByUserId
-);
+mvtStockrouter.get("/byUser/:userId", authenticate, getMouvementsStockByUserId);
 mvtStockrouter.get(
   "/byUser/aggregate/:userId",
   authenticate,
-  getMouvementsStockAggregatedByUserId
+  getMouvementsStockAggregatedByUserId,
 );
 mvtStockrouter.get(
   "/region/:regionId",

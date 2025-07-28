@@ -8,17 +8,19 @@ import {
   getCommandesByRegion,
   createCommande,
   updateCommande,
-  deleteCommande
+  deleteCommande,
 } from "../Controllers/commandeController";
 
 const commandeRouter = express.Router();
 
-
-
 commandeRouter.get("/", authenticate, getAllCommandes);
 commandeRouter.get("/:id", authenticate, getCommandeById);
 commandeRouter.get("/by-user/:userId", authenticate, getCommandesByUser);
-commandeRouter.get("/by-pointvente/:pointVenteId", authenticate, getCommandesByPointVente);
+commandeRouter.get(
+  "/by-pointvente/:pointVenteId",
+  authenticate,
+  getCommandesByPointVente,
+);
 commandeRouter.get("/by-region/:regionId", authenticate, getCommandesByRegion);
 
 commandeRouter.post("/", authenticate, createCommande);

@@ -145,13 +145,6 @@
 //   }
 // };
 
-
-
-
-
-
-
-
 // controllers/organisationController.ts
 
 import fs from "fs";
@@ -173,7 +166,8 @@ export const getAllOrganisations = async (req: Request, res: Response) => {
 export const getOrganisationById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const organisation = await Organisations.findById(id).populate("superAdmin");
+    const organisation =
+      await Organisations.findById(id).populate("superAdmin");
 
     if (!organisation) {
       res.status(404).json({ message: "Organisation non trouvée" });

@@ -33,7 +33,7 @@ router.put(
   "/:id",
   authenticate,
   authorize(["SuperAdmin", "AdminRegion"]),
-  updateRegion
+  updateRegion,
 );
 router.delete(
   "/:id",

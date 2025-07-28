@@ -52,6 +52,7 @@
     "nodemon": "^3.1.9",
     "pdfkit": "^0.17.0",
     "salemanagement-api": "file:",
+    "serverless-http": "^3.2.0",
     "xlsx": "^0.18.5"
   }
 }

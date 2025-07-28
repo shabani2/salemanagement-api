@@ -7,7 +7,7 @@ import {
   getAllProduits,
   getProduitById,
   updateProduit,
-  searchProduit
+  searchProduit,
 } from "../Controllers/produitController";
 import { upload } from "../Middlewares/upload";
 import { updatePointVente } from "../Controllers/pointVenteController";
@@ -37,7 +37,7 @@ router.get(
   "/search",
   authenticate,
   authorize(["SuperAdmin", "AdminRegion", "AdminPointVente"]),
- searchProduit,
+  searchProduit,
 );
 router.get(
   "/:id",

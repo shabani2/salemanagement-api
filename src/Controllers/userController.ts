@@ -39,7 +39,8 @@ export const getUsersByRegion = async (
     const filteredUsers = users.filter(
       (user) =>
         user.region?._id?.toString() === regionId ||
-        (user.pointVente && (user.pointVente as any).region?._id?.toString() === regionId),
+        (user.pointVente &&
+          (user.pointVente as any).region?._id?.toString() === regionId),
     );
     res.json(filteredUsers);
   } catch (err) {

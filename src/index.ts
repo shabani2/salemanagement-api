@@ -18,10 +18,14 @@ import stockRouter from "./Routes/stockRoutes";
 import organisationRoutes from "./Routes/organisationRoutes";
 import pdfRouter from "./Routes/pdfRouter";
 import exportRouter from "./Routes/exportRouter";
-import { currencyRouter, discountRouter, exchangeRateRouter, financialSettingsRouter } from "./Routes/FinanceRoutes";
+import {
+  currencyRouter,
+  discountRouter,
+  exchangeRateRouter,
+  financialSettingsRouter,
+} from "./Routes/FinanceRoutes";
 import commandeProduitRouter from "./Routes/commandeProduitRoutes";
 import commandeRouter from "./Routes/commandeRoutes";
-
 
 dotenv.config();
 const app = express();
@@ -51,8 +55,8 @@ export const corsOptions: cors.CorsOptions = {
 app.use(cors(corsOptions));
 
 // 🛠 Middleware JSON (après CORS)
-app.use(express.json({ limit: '20mb' }));
-app.use(express.urlencoded({ limit: '20mb', extended: true }));
+app.use(express.json({ limit: "20mb" }));
+app.use(express.urlencoded({ limit: "20mb", extended: true }));
 
 // 🔥 Vérifier que les requêtes OPTIONS passent bien
 app.options("*", cors(corsOptions)); // Autoriser les préflight requests
@@ -109,17 +113,16 @@ app.use("/stock", stockRouter);
 app.use("/generatePdf", pdfRouter);
 
 // Finance routes
-app.use('/finance/currencies', currencyRouter);
-app.use('/finance/exchange-rates', exchangeRateRouter);
-app.use('/finance/discounts', discountRouter);
-app.use('/finance/settings', financialSettingsRouter);
+app.use("/finance/currencies", currencyRouter);
+app.use("/finance/exchange-rates", exchangeRateRouter);
+app.use("/finance/discounts", discountRouter);
+app.use("/finance/settings", financialSettingsRouter);
 
-//routes pour les commandes 
+//routes pour les commandes
 app.use("/api/commandes", commandeRouter);
 app.use("/api/commande-produits", commandeProduitRouter);
 // routes pour les exports
 app.use("/export", exportRouter);
-
 
 app.get("/", (_req, res) => {
   res.send("Bienvenue sur notre API de la gestion de vente");
@@ -140,7 +143,6 @@ app.use(errorHandler);
 const Port = process.env.PORT || 8000;
 //app.listen(Port, () => console.log(`🚀 Server is running on port ${Port}`));
 //app.use(morgan("dev"));
-console.log("🚀 Express app initialisée");
+//console.log("🚀 Express app initialisée");
 
 export default app;
-

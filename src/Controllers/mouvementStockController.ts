@@ -6,7 +6,7 @@ export const getAllMouvementsStock = async (req: Request, res: Response) => {
   try {
     const mouvements = await MouvementStock.find()
       .sort({ createdAt: -1 })
-      .populate('region')
+      .populate("region")
       .populate({
         path: "pointVente",
         populate: { path: "region", model: "Region" },
@@ -19,8 +19,8 @@ export const getAllMouvementsStock = async (req: Request, res: Response) => {
         path: "user",
         populate: [
           { path: "pointVente", model: "PointVente" },
-          { path: "region", model: "Region" }
-        ]
+          { path: "region", model: "Region" },
+        ],
       });
 
     res.json(mouvements);
@@ -29,13 +29,16 @@ export const getAllMouvementsStock = async (req: Request, res: Response) => {
   }
 };
 
-export const getMouvementStockByRegion = async (req: Request, res: Response) => {
+export const getMouvementStockByRegion = async (
+  req: Request,
+  res: Response,
+) => {
   try {
     const { regionId } = req.params;
 
     const mouvements = await MouvementStock.find()
       .sort({ createdAt: -1 })
-      .populate('region')
+      .populate("region")
       .populate({
         path: "pointVente",
         populate: { path: "region", model: "Region" },
@@ -48,23 +51,29 @@ export const getMouvementStockByRegion = async (req: Request, res: Response) => 
         path: "user",
         populate: [
           { path: "pointVente", model: "PointVente" },
-          { path: "region", model: "Region" }
-        ]
+          { path: "region", model: "Region" },
+        ],
       });
 
-    const mouvementsFiltres = mouvements.filter((m: any) =>
-      m.pointVente?.region?._id?.toString() === regionId ||
-      m.region?._id?.toString() === regionId
+    const mouvementsFiltres = mouvements.filter(
+      (m: any) =>
+        m.pointVente?.region?._id?.toString() === regionId ||
+        m.region?._id?.toString() === regionId,
     );
 
     res.json(mouvementsFiltres);
   } catch (err) {
     console.error("Erreur dans getMouvementStockByRegion:", err);
-    res.status(500).json({ message: "Erreur interne", error: (err as any)?.message });
+    res
+      .status(500)
+      .json({ message: "Erreur interne", error: (err as any)?.message });
   }
 };
 
-export const getMouvementsStockByPointVente = async (req: Request, res: Response) => {
+export const getMouvementsStockByPointVente = async (
+  req: Request,
+  res: Response,
+) => {
   try {
     const { pointVenteId } = req.params;
     if (!pointVenteId) {
@@ -89,8 +98,8 @@ export const getMouvementsStockByPointVente = async (req: Request, res: Response
         path: "user",
         populate: [
           { path: "pointVente", model: "PointVente" },
-          { path: "region", model: "Region" }
-        ]
+          { path: "region", model: "Region" },
+        ],
       });
 
     if (!mouvements.length) {
@@ -121,8 +130,8 @@ export const getMouvementStockById = async (req: Request, res: Response) => {
         path: "user",
         populate: [
           { path: "pointVente", model: "PointVente" },
-          { path: "region", model: "Region" }
-        ]
+          { path: "region", model: "Region" },
+        ],
       });
 
     if (!mouvement) {
@@ -147,7 +156,7 @@ export const createMouvementStock = async (req: Request, res: Response) => {
       montant,
       statut,
       region,
-      user
+      user,
     } = req.body;
 
     // Correction 1: Validation adaptée pour depotCentral (booléen)
@@ -158,7 +167,8 @@ export const createMouvementStock = async (req: Request, res: Response) => {
     // Validation: Au moins une entité doit être associée
     if (!hasPointVente && !hasDepotCentral && !hasRegion) {
       res.status(400).json({
-        message: "Le mouvement doit être associé à un point de vente, un dépôt central ou une région"
+        message:
+          "Le mouvement doit être associé à un point de vente, un dépôt central ou une région",
       });
       return;
     }
@@ -175,13 +185,14 @@ export const createMouvementStock = async (req: Request, res: Response) => {
       quantite,
       montant,
       statut,
-      user
+      user,
     };
 
     // Ajout des champs optionnels
-    if (pointVente) mouvementData.pointVente = new mongoose.Types.ObjectId(pointVente);
+    if (pointVente)
+      mouvementData.pointVente = new mongoose.Types.ObjectId(pointVente);
     if (region) mouvementData.region = new mongoose.Types.ObjectId(region);
-    
+
     // Correction 2: Toujours inclure depotCentral (booléen)
     mouvementData.depotCentral = !!depotCentral;
 
@@ -194,25 +205,25 @@ export const createMouvementStock = async (req: Request, res: Response) => {
         path: "user",
         populate: [
           { path: "pointVente", model: "PointVente" },
-          { path: "region", model: "Region" }
-        ]
+          { path: "region", model: "Region" },
+        ],
       })
       .populate("region")
       .populate({
         path: "pointVente", // Correction typo: 'pointVente' au lieu de 'pointVente'
-        populate: { path: "region", model: "Region" }
+        populate: { path: "region", model: "Region" },
       })
       .populate({
         path: "produit",
-        populate: { path: "categorie", model: "Categorie" }
+        populate: { path: "categorie", model: "Categorie" },
       });
 
     res.status(201).json(populatedMouvement);
   } catch (err) {
     // Amélioration du message d'erreur
-    res.status(400).json({ 
+    res.status(400).json({
       message: "Erreur lors de la création",
-      error: (err as Error).message
+      error: (err as Error).message,
     });
   }
 };
@@ -229,7 +240,7 @@ export const updateMouvementStock = async (req: Request, res: Response) => {
       montant,
       statut,
       region,
-      user
+      user,
     } = req.body;
 
     // Correction 3: Même validation que pour la création
@@ -239,7 +250,8 @@ export const updateMouvementStock = async (req: Request, res: Response) => {
 
     if (!hasPointVente && !hasDepotCentral && !hasRegion) {
       res.status(400).json({
-        message: "Le mouvement doit être associé à un point de vente, un dépôt central ou une région"
+        message:
+          "Le mouvement doit être associé à un point de vente, un dépôt central ou une région",
       });
       return;
     }
@@ -255,12 +267,13 @@ export const updateMouvementStock = async (req: Request, res: Response) => {
       quantite,
       montant,
       statut,
-      user: new mongoose.Types.ObjectId(user)
+      user: new mongoose.Types.ObjectId(user),
     };
 
-    if (pointVente) updateData.pointVente = new mongoose.Types.ObjectId(pointVente);
+    if (pointVente)
+      updateData.pointVente = new mongoose.Types.ObjectId(pointVente);
     if (region) updateData.region = new mongoose.Types.ObjectId(region);
-    
+
     // Correction 4: Toujours inclure depotCentral
     updateData.depotCentral = !!depotCentral;
 
@@ -271,17 +284,17 @@ export const updateMouvementStock = async (req: Request, res: Response) => {
         path: "user",
         populate: [
           { path: "pointVente", model: "PointVente" },
-          { path: "region", model: "Region" }
-        ]
+          { path: "region", model: "Region" },
+        ],
       })
       .populate("region")
       .populate({
         path: "pointVente",
-        populate: { path: "region", model: "Region" }
+        populate: { path: "region", model: "Region" },
       })
       .populate({
         path: "produit",
-        populate: { path: "categorie", model: "Categorie" }
+        populate: { path: "categorie", model: "Categorie" },
       });
 
     if (!updated) {
@@ -291,9 +304,9 @@ export const updateMouvementStock = async (req: Request, res: Response) => {
 
     res.json(updated);
   } catch (err) {
-    res.status(400).json({ 
-      message: "Erreur lors de la mise à jour", 
-      error: (err as Error).message 
+    res.status(400).json({
+      message: "Erreur lors de la mise à jour",
+      error: (err as Error).message,
     });
   }
 };
@@ -315,23 +328,23 @@ export const validateState = async (req: Request, res: Response) => {
     const mouvement = await MouvementStock.findByIdAndUpdate(
       id,
       { statut: true },
-      { new: true }
+      { new: true },
     )
       .populate({
         path: "user",
         populate: [
           { path: "pointVente", model: "PointVente" },
-          { path: "region", model: "Region" }
-        ]
+          { path: "region", model: "Region" },
+        ],
       })
       .populate("region")
       .populate({
         path: "pointVente",
-        populate: { path: "region", model: "Region" }
+        populate: { path: "region", model: "Region" },
       })
       .populate({
         path: "produit",
-        populate: { path: "categorie", model: "Categorie" }
+        populate: { path: "categorie", model: "Categorie" },
       });
 
     if (!mouvement) {
@@ -341,14 +354,18 @@ export const validateState = async (req: Request, res: Response) => {
 
     res.json({ message: "Statut du mouvement mis à jour", mouvement });
   } catch (err) {
-    res.status(500).json({ message: "Erreur lors de la validation", error: err });
+    res
+      .status(500)
+      .json({ message: "Erreur lors de la validation", error: err });
   }
 };
 
-
 //fonction avec pagination :
 
-export const getMouvementsStockByPointVenteId = async (req: Request, res: Response) => {
+export const getMouvementsStockByPointVenteId = async (
+  req: Request,
+  res: Response,
+) => {
   try {
     const { pointVenteId } = req.params;
     const page = parseInt(req.query.page as string) || 1;
@@ -383,8 +400,8 @@ export const getMouvementsStockByPointVenteId = async (req: Request, res: Respon
         path: "user",
         populate: [
           { path: "pointVente", model: "PointVente" },
-          { path: "region", model: "Region" }
-        ]
+          { path: "region", model: "Region" },
+        ],
       });
 
     if (!mouvements.length) {
@@ -397,15 +414,17 @@ export const getMouvementsStockByPointVenteId = async (req: Request, res: Respon
       page,
       pages: Math.ceil(total / limit),
       limit,
-      mouvements
+      mouvements,
     });
   } catch (err) {
     res.status(500).json({ message: "Erreur interne", error: err });
   }
 };
 
-
-export const getMouvementsStockByUserId = async (req: Request, res: Response) => {
+export const getMouvementsStockByUserId = async (
+  req: Request,
+  res: Response,
+) => {
   try {
     const { userId } = req.params;
     const page = parseInt(req.query.page as string) || 1;
@@ -440,12 +459,14 @@ export const getMouvementsStockByUserId = async (req: Request, res: Response) =>
         path: "user",
         populate: [
           { path: "pointVente", model: "PointVente" },
-          { path: "region", model: "Region" }
-        ]
+          { path: "region", model: "Region" },
+        ],
       });
 
     if (!mouvements.length) {
-      res.status(404).json({ message: "Aucun mouvement trouvé pour cet utilisateur" });
+      res
+        .status(404)
+        .json({ message: "Aucun mouvement trouvé pour cet utilisateur" });
       return;
     }
 
@@ -454,7 +475,7 @@ export const getMouvementsStockByUserId = async (req: Request, res: Response) =>
       page,
       pages: Math.ceil(total / limit),
       limit,
-      mouvements
+      mouvements,
     });
   } catch (err) {
     res.status(500).json({ message: "Erreur interne", error: err });
@@ -502,7 +523,7 @@ export const getMouvementsStockByUserId = async (req: Request, res: Response) =>
 //         }
 //       },
 //       // Pas de tri ici car nous n'avons pas encore les données du produit
-//       { 
+//       {
 //         $facet: {
 //           metadata: [{ $count: "total" }],
 //           data: [{ $skip: skip }, { $limit: limit }]
@@ -511,7 +532,7 @@ export const getMouvementsStockByUserId = async (req: Request, res: Response) =>
 //     ];
 
 //     const result = await MouvementStock.aggregate(aggregationPipeline);
-    
+
 //     const data = result[0]?.data || [];
 //     const metadata = result[0]?.metadata || [];
 //     const total = metadata.length > 0 ? metadata[0].total : 0;
@@ -527,13 +548,13 @@ export const getMouvementsStockByUserId = async (req: Request, res: Response) =>
 //       if (item.produitInfo && item.produitInfo.categorie) {
 //         const populatedProduit = await Produit.findById(item.produitInfo._id)
 //           .populate({ path: "categorie", model: "Categorie" });
-        
+
 //         return {
 //           ...item,
 //           produit: populatedProduit
 //         };
 //       }
-      
+
 //       return {
 //         ...item,
 //         produit: item.produitInfo
@@ -554,7 +575,10 @@ export const getMouvementsStockByUserId = async (req: Request, res: Response) =>
 //   }
 // };
 
-export const getMouvementsStockAggregatedByUserId = async (req: Request, res: Response) => {
+export const getMouvementsStockAggregatedByUserId = async (
+  req: Request,
+  res: Response,
+) => {
   try {
     const { userId } = req.params;
     const page = parseInt(req.query.page as string) || 1;
@@ -570,16 +594,16 @@ export const getMouvementsStockAggregatedByUserId = async (req: Request, res: Re
     const aggregationPipeline: PipelineStage[] = [
       {
         $match: {
-          user: new mongoose.Types.ObjectId(userId)
-        }
+          user: new mongoose.Types.ObjectId(userId),
+        },
       },
       {
         $group: {
           _id: "$produit",
           totalQuantite: { $sum: "$quantite" },
           totalMontant: { $sum: "$montant" },
-          count: { $sum: 1 }
-        }
+          count: { $sum: 1 },
+        },
       },
       {
         $project: {
@@ -587,44 +611,50 @@ export const getMouvementsStockAggregatedByUserId = async (req: Request, res: Re
           produit: "$_id",
           totalQuantite: 1,
           totalMontant: 1,
-          count: 1
-        }
+          count: 1,
+        },
       },
       // Pas de tri ici car nous n'avons pas encore les données du produit
-      { 
+      {
         $facet: {
           metadata: [{ $count: "total" }],
-          data: [{ $skip: skip }, { $limit: limit }]
-        }
-      }
+          data: [{ $skip: skip }, { $limit: limit }],
+        },
+      },
     ];
 
     const result = await MouvementStock.aggregate(aggregationPipeline);
-    
+
     const data = result[0]?.data || [];
     const metadata = result[0]?.metadata || [];
     const total = metadata.length > 0 ? metadata[0].total : 0;
 
     if (!data.length) {
-     res.status(404).json({ message: "Aucun mouvement trouvé pour cet utilisateur" });
+      res
+        .status(404)
+        .json({ message: "Aucun mouvement trouvé pour cet utilisateur" });
       return;
     }
 
     // Peuplement des références et tri côté application
-    const populatedData = await Promise.all(data.map(async (item: any) => {
-      const populatedProduit = await Produit.findById(item.produit)
-        .populate({ path: "categorie", model: "Categorie" });
-      
-      return {
-        ...item,
-        produit: populatedProduit
-      };
-    }));
+    const populatedData = await Promise.all(
+      data.map(async (item: any) => {
+        const populatedProduit = await Produit.findById(item.produit).populate({
+          path: "categorie",
+          model: "Categorie",
+        });
+
+        return {
+          ...item,
+          produit: populatedProduit,
+        };
+      }),
+    );
 
     // Tri par nom de produit après peuplement
     const sortedData = populatedData.sort((a, b) => {
-      const nomA = a.produit?.nom || '';
-      const nomB = b.produit?.nom || '';
+      const nomA = a.produit?.nom || "";
+      const nomB = b.produit?.nom || "";
       return nomA.localeCompare(nomB);
     });
 
@@ -633,17 +663,20 @@ export const getMouvementsStockAggregatedByUserId = async (req: Request, res: Re
       page,
       pages: Math.ceil(total / limit),
       limit,
-      mouvements: sortedData
+      mouvements: sortedData,
     });
     return;
   } catch (err) {
-    console.error('Erreur dans getMouvementsStockAggregatedByUserId:', err);
+    console.error("Erreur dans getMouvementsStockAggregatedByUserId:", err);
     res.status(500).json({ message: "Erreur interne", error: err });
     return;
   }
 };
 
-export const getMouvementsStockAggregatedByPointVente = async (req: Request, res: Response) => {
+export const getMouvementsStockAggregatedByPointVente = async (
+  req: Request,
+  res: Response,
+) => {
   try {
     const { pointVenteId } = req.params;
     const page = parseInt(req.query.page as string) || 1;
@@ -659,8 +692,8 @@ export const getMouvementsStockAggregatedByPointVente = async (req: Request, res
     const aggregationPipeline: PipelineStage[] = [
       {
         $match: {
-          pointVente: new mongoose.Types.ObjectId(pointVenteId)
-        }
+          pointVente: new mongoose.Types.ObjectId(pointVenteId),
+        },
       },
       // Jointure avec les produits
       {
@@ -668,8 +701,8 @@ export const getMouvementsStockAggregatedByPointVente = async (req: Request, res
           from: "produits", // Nom de la collection Produit
           localField: "produit",
           foreignField: "_id",
-          as: "produitInfo"
-        }
+          as: "produitInfo",
+        },
       },
       { $unwind: "$produitInfo" }, // Déroule le tableau produitInfo
       // Jointure avec les catégories
@@ -678,8 +711,8 @@ export const getMouvementsStockAggregatedByPointVente = async (req: Request, res
           from: "categories", // Nom de la collection Categorie
           localField: "produitInfo.categorie",
           foreignField: "_id",
-          as: "categorieInfo"
-        }
+          as: "categorieInfo",
+        },
       },
       { $unwind: { path: "$categorieInfo", preserveNullAndEmptyArrays: true } },
       // Groupement par produit et type
@@ -687,15 +720,15 @@ export const getMouvementsStockAggregatedByPointVente = async (req: Request, res
         $group: {
           _id: {
             produitId: "$produit", // Garde l'ID pour le peuplement final
-            type: "$type"
+            type: "$type",
           },
           totalQuantite: { $sum: "$quantite" },
           totalMontant: { $sum: "$montant" },
           count: { $sum: 1 },
           // Garde les infos nécessaires pour le peuplement
           produitData: { $first: "$produitInfo" },
-          categorieData: { $first: "$categorieInfo" }
-        }
+          categorieData: { $first: "$categorieInfo" },
+        },
       },
       // Projection des résultats
       {
@@ -706,31 +739,31 @@ export const getMouvementsStockAggregatedByPointVente = async (req: Request, res
             nom: "$produitData.nom",
             code: "$produitData.code",
             // Ajoutez ici d'autres champs nécessaires
-            categorie: "$categorieData"
+            categorie: "$categorieData",
           },
           type: "$_id.type",
           totalQuantite: 1,
           totalMontant: 1,
-          count: 1
-        }
+          count: 1,
+        },
       },
       { $sort: { "produit.nom": 1 } }, // Tri par nom de produit
-      { 
+      {
         $facet: {
           metadata: [{ $count: "total" }],
-          data: [{ $skip: skip }, { $limit: limit }]
-        }
-      }
+          data: [{ $skip: skip }, { $limit: limit }],
+        },
+      },
     ];
 
     const result = await MouvementStock.aggregate(aggregationPipeline);
-    
+
     const data = result[0]?.data || [];
     const metadata = result[0]?.metadata || [];
     const total = metadata.length > 0 ? metadata[0].total : 0;
 
     if (!data.length) {
-       res.status(404).json({ message: "Aucun mouvement trouvé" });
+      res.status(404).json({ message: "Aucun mouvement trouvé" });
       return;
     }
 
@@ -739,32 +772,34 @@ export const getMouvementsStockAggregatedByPointVente = async (req: Request, res
       page,
       pages: Math.ceil(total / limit),
       limit,
-      mouvements: data // Les données sont déjà peuplées
+      mouvements: data, // Les données sont déjà peuplées
     });
     return;
   } catch (err) {
-    console.error('Erreur dans getMouvementsStockAggregatedByPointVente:', err);
+    console.error("Erreur dans getMouvementsStockAggregatedByPointVente:", err);
     res.status(500).json({ message: "Erreur interne", error: err });
     return;
   }
 };
 
-
 //integration de la pagination
 
-export const getAllMouvementsStockPage = async (req: Request, res: Response) => {
+export const getAllMouvementsStockPage = async (
+  req: Request,
+  res: Response,
+) => {
   try {
     const page = parseInt(req.query.page as string) || 1;
     const limit = 10;
     const skip = (page - 1) * limit;
 
     const total = await MouvementStock.countDocuments();
-    
+
     const mouvements = await MouvementStock.find()
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
-      .populate('region')
+      .populate("region")
       .populate({
         path: "pointVente",
         populate: { path: "region", model: "Region" },
@@ -777,8 +812,8 @@ export const getAllMouvementsStockPage = async (req: Request, res: Response) => 
         path: "user",
         populate: [
           { path: "pointVente", model: "PointVente" },
-          { path: "region", model: "Region" }
-        ]
+          { path: "region", model: "Region" },
+        ],
       });
 
     res.json({
@@ -786,14 +821,17 @@ export const getAllMouvementsStockPage = async (req: Request, res: Response) => 
       page,
       pages: Math.ceil(total / limit),
       limit,
-      mouvements
+      mouvements,
     });
   } catch (err) {
     res.status(500).json({ message: "Erreur interne", error: err });
   }
 };
 
-export const getMouvementStockByRegionPage = async (req: Request, res: Response) => {
+export const getMouvementStockByRegionPage = async (
+  req: Request,
+  res: Response,
+) => {
   try {
     const { regionId } = req.params;
     const page = parseInt(req.query.page as string) || 1;
@@ -805,7 +843,7 @@ export const getMouvementStockByRegionPage = async (req: Request, res: Response)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
-      .populate('region')
+      .populate("region")
       .populate({
         path: "pointVente",
         populate: { path: "region", model: "Region" },
@@ -818,25 +856,29 @@ export const getMouvementStockByRegionPage = async (req: Request, res: Response)
         path: "user",
         populate: [
           { path: "pointVente", model: "PointVente" },
-          { path: "region", model: "Region" }
-        ]
+          { path: "region", model: "Region" },
+        ],
       });
 
     // Filtrer après population
-    const mouvementsFiltres = allMouvements.filter((m: any) =>
-      m.pointVente?.region?._id?.toString() === regionId ||
-      m.region?._id?.toString() === regionId
+    const mouvementsFiltres = allMouvements.filter(
+      (m: any) =>
+        m.pointVente?.region?._id?.toString() === regionId ||
+        m.region?._id?.toString() === regionId,
     );
 
     // Compter le total sans pagination pour le filtre
-    const allCount = await MouvementStock.find().populate('region').populate({
-      path: "pointVente",
-      populate: { path: "region", model: "Region" },
-    });
-    
-    const total = allCount.filter((m: any) =>
-      m.pointVente?.region?._id?.toString() === regionId ||
-      m.region?._id?.toString() === regionId
+    const allCount = await MouvementStock.find()
+      .populate("region")
+      .populate({
+        path: "pointVente",
+        populate: { path: "region", model: "Region" },
+      });
+
+    const total = allCount.filter(
+      (m: any) =>
+        m.pointVente?.region?._id?.toString() === regionId ||
+        m.region?._id?.toString() === regionId,
     ).length;
 
     res.json({
@@ -844,15 +886,20 @@ export const getMouvementStockByRegionPage = async (req: Request, res: Response)
       page,
       pages: Math.ceil(total / limit),
       limit,
-      mouvements: mouvementsFiltres
+      mouvements: mouvementsFiltres,
     });
   } catch (err) {
     console.error("Erreur dans getMouvementStockByRegion:", err);
-    res.status(500).json({ message: "Erreur interne", error: (err as any)?.message });
+    res
+      .status(500)
+      .json({ message: "Erreur interne", error: (err as any)?.message });
   }
 };
 
-export const getMouvementsStockByPointVentePage = async (req: Request, res: Response) => {
+export const getMouvementsStockByPointVentePage = async (
+  req: Request,
+  res: Response,
+) => {
   try {
     const { pointVenteId } = req.params;
     const page = parseInt(req.query.page as string) || 1;
@@ -887,17 +934,17 @@ export const getMouvementsStockByPointVentePage = async (req: Request, res: Resp
         path: "user",
         populate: [
           { path: "pointVente", model: "PointVente" },
-          { path: "region", model: "Region" }
-        ]
+          { path: "region", model: "Region" },
+        ],
       });
 
     if (!mouvements.length) {
-      res.status(404).json({ 
+      res.status(404).json({
         message: "Aucun mouvement trouvé",
         total: 0,
         page,
         pages: 0,
-        limit
+        limit,
       });
       return;
     }
@@ -907,14 +954,17 @@ export const getMouvementsStockByPointVentePage = async (req: Request, res: Resp
       page,
       pages: Math.ceil(total / limit),
       limit,
-      mouvements
+      mouvements,
     });
   } catch (err) {
     res.status(500).json({ message: "Erreur interne", error: err });
   }
 };
 
-export const getMouvementStockByIdPage = async (req: Request, res: Response) => {
+export const getMouvementStockByIdPage = async (
+  req: Request,
+  res: Response,
+) => {
   try {
     const { id } = req.params;
     const mouvement = await MouvementStock.findById(id)
@@ -931,8 +981,8 @@ export const getMouvementStockByIdPage = async (req: Request, res: Response) => 
         path: "user",
         populate: [
           { path: "pointVente", model: "PointVente" },
-          { path: "region", model: "Region" }
-        ]
+          { path: "region", model: "Region" },
+        ],
       });
 
     if (!mouvement) {
@@ -948,7 +998,10 @@ export const getMouvementStockByIdPage = async (req: Request, res: Response) => 
 };
 
 // Nouvelle fonction avec pagination pour les mouvements par région (version optimisée)
-export const getMouvementsStockByRegionOptimizedPage = async (req: Request, res: Response) => {
+export const getMouvementsStockByRegionOptimizedPage = async (
+  req: Request,
+  res: Response,
+) => {
   try {
     const { regionId } = req.params;
     const page = parseInt(req.query.page as string) || 1;
@@ -957,14 +1010,11 @@ export const getMouvementsStockByRegionOptimizedPage = async (req: Request, res:
 
     // Trouver tous les points de vente dans la région
     const pointVentes = await PointVente.find({ region: regionId });
-    const pointVenteIds = pointVentes.map(pv => pv._id);
+    const pointVenteIds = pointVentes.map((pv) => pv._id);
 
     // Requête unique avec $or
     const query = {
-      $or: [
-        { region: regionId },
-        { pointVente: { $in: pointVenteIds } }
-      ]
+      $or: [{ region: regionId }, { pointVente: { $in: pointVenteIds } }],
     };
 
     const total = await MouvementStock.countDocuments(query);
@@ -973,7 +1023,7 @@ export const getMouvementsStockByRegionOptimizedPage = async (req: Request, res:
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
-      .populate('region')
+      .populate("region")
       .populate({
         path: "pointVente",
         populate: { path: "region", model: "Region" },
@@ -986,8 +1036,8 @@ export const getMouvementsStockByRegionOptimizedPage = async (req: Request, res:
         path: "user",
         populate: [
           { path: "pointVente", model: "PointVente" },
-          { path: "region", model: "Region" }
-        ]
+          { path: "region", model: "Region" },
+        ],
       });
 
     res.json({
@@ -995,14 +1045,15 @@ export const getMouvementsStockByRegionOptimizedPage = async (req: Request, res:
       page,
       pages: Math.ceil(total / limit),
       limit,
-      mouvements
+      mouvements,
     });
   } catch (err) {
     console.error("Erreur dans getMouvementStockByRegionOptimized:", err);
-    res.status(500).json({ message: "Erreur interne", error: (err as any)?.message });
+    res
+      .status(500)
+      .json({ message: "Erreur interne", error: (err as any)?.message });
   }
 };
-
 
 export const livrerProduitCommande = async (req: Request, res: Response) => {
   try {
@@ -1014,13 +1065,13 @@ export const livrerProduitCommande = async (req: Request, res: Response) => {
       user,
       pointVente,
       region,
-      depotCentral
+      depotCentral,
     } = req.body;
 
     // Validation obligatoire de base
     if (!commandeId || !produit || !quantite || !montant || !user) {
       res.status(400).json({
-        message: "commandeId, produit, quantite, montant et user sont requis."
+        message: "commandeId, produit, quantite, montant et user sont requis.",
       });
       return;
     }
@@ -1032,7 +1083,8 @@ export const livrerProduitCommande = async (req: Request, res: Response) => {
 
     if (!hasPointVente && !hasRegion && !hasDepotCentral) {
       res.status(400).json({
-        message: "Le mouvement doit être associé à un point de vente, une région ou un dépôt central."
+        message:
+          "Le mouvement doit être associé à un point de vente, une région ou un dépôt central.",
       });
       return;
     }
@@ -1044,20 +1096,21 @@ export const livrerProduitCommande = async (req: Request, res: Response) => {
     }
 
     // Recherche du produit dans la commande
-    const produitCommande = commande.produits.find(p =>
-      p.produit.toString() === produit && p.statut === 'attente'
+    const produitCommande = commande.produits.find(
+      (p) => p.produit.toString() === produit && p.statut === "attente",
     );
 
     if (!produitCommande) {
       res.status(400).json({
-        message: "Ce produit n'existe pas dans la commande ou a déjà été livré/annulé."
+        message:
+          "Ce produit n'existe pas dans la commande ou a déjà été livré/annulé.",
       });
       return;
     }
 
     if (quantite < produitCommande.quantite) {
-       res.status(400).json({
-        message: "Quantité livrée inférieure à la quantité commandée."
+      res.status(400).json({
+        message: "Quantité livrée inférieure à la quantité commandée.",
       });
       return;
     }
@@ -1067,39 +1120,40 @@ export const livrerProduitCommande = async (req: Request, res: Response) => {
       produit: new mongoose.Types.ObjectId(produit),
       quantite,
       montant,
-      type: 'Livraison',
+      type: "Livraison",
       statut: true,
       user: new mongoose.Types.ObjectId(user),
       commandeId: new mongoose.Types.ObjectId(commandeId),
       depotCentral: !!depotCentral,
     };
 
-    if (pointVente) mouvementData.pointVente = new mongoose.Types.ObjectId(pointVente);
+    if (pointVente)
+      mouvementData.pointVente = new mongoose.Types.ObjectId(pointVente);
     if (region) mouvementData.region = new mongoose.Types.ObjectId(region);
 
     const mouvement = new MouvementStock(mouvementData);
     await mouvement.save();
 
     // Mise à jour du produit dans la commande
-    produitCommande.statut = 'livré';
+    produitCommande.statut = "livré";
     produitCommande.mouvementStockId = mouvement._id;
 
     // Si tous les produits sont livrés, mettre à jour le statut global
-    const tousLivrés = commande.produits.every(p => p.statut === 'livré');
+    const tousLivrés = commande.produits.every((p) => p.statut === "livré");
     if (tousLivrés) {
-      commande.statut = 'livrée';
+      commande.statut = "livrée";
     }
 
     await commande.save();
 
     const populatedMouvement = await MouvementStock.findById(mouvement._id)
-      .populate('produit')
-      .populate('commandeId')
-      .populate('user')
-      .populate('region')
+      .populate("produit")
+      .populate("commandeId")
+      .populate("user")
+      .populate("region")
       .populate({
-        path: 'pointVente',
-        populate: { path: 'region', model: 'Region' }
+        path: "pointVente",
+        populate: { path: "region", model: "Region" },
       });
 
     res.status(201).json({
@@ -1107,7 +1161,6 @@ export const livrerProduitCommande = async (req: Request, res: Response) => {
       livraison: populatedMouvement,
     });
     return;
-
   } catch (err) {
     res.status(400).json({
       message: "Erreur lors de la livraison du produit",

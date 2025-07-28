@@ -12,9 +12,6 @@ import { Produit } from "../Models/model";
 
 const logoPath = path.join(__dirname, "./../assets/default/inaf.png");
 
-
-
-
 export const generateStockPdf = async (req: Request, res: Response) => {
   try {
     const {
@@ -41,15 +38,15 @@ export const generateStockPdf = async (req: Request, res: Response) => {
 
     const allProduits = await Produit.find();
     // Générer le numéro du document (10 chiffres)
-const today = new Date();
-const datePart = format(today, "yyMMdd");
-let seriePart = "0001";
-if (/^\d+$/.test(serie)) {
-  seriePart = serie.slice(-4).padStart(4, "0");
-} else if (user && user.id) {
-  seriePart = String(user.id).slice(-4).padStart(4, "0");
-}
-const numeroDocument = `${datePart}${seriePart}`;
+    const today = new Date();
+    const datePart = format(today, "yyMMdd");
+    let seriePart = "0001";
+    if (/^\d+$/.test(serie)) {
+      seriePart = serie.slice(-4).padStart(4, "0");
+    } else if (user && user.id) {
+      seriePart = String(user.id).slice(-4).padStart(4, "0");
+    }
+    const numeroDocument = `${datePart}${seriePart}`;
 
     const doc = new PDFDocument({ margin: 24, font: "Helvetica" });
     const chunks: Buffer[] = [];
@@ -119,17 +116,19 @@ const numeroDocument = `${datePart}${seriePart}`;
       .fillColor("black")
       .font("Helvetica")
       .fontSize(9);
-    doc.text(`Date : ${format(new Date(), "dd/MM/yyyy HH:mm")}`, { align: "right" });
+    doc.text(`Date : ${format(new Date(), "dd/MM/yyyy HH:mm")}`, {
+      align: "right",
+    });
     doc.text(`Série : ${serie}`, { align: "right" });
     // ... après docType, date et série
-doc
-.font("Helvetica-Bold")
-.fontSize(10)
-.fillColor("#003366")
-.text(`Numéro : ${numeroDocument}`, { align: "right" })
-.fillColor("black")
-.font("Helvetica")
-.fontSize(9);
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(10)
+      .fillColor("#003366")
+      .text(`Numéro : ${numeroDocument}`, { align: "right" })
+      .fillColor("black")
+      .font("Helvetica")
+      .fontSize(9);
 
     doc.text(`ID Utilisateur : ${user.id}`, { align: "right" });
 

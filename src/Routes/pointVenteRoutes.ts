@@ -23,11 +23,7 @@ pointVenteRoutes.post(
   authorize(["SuperAdmin", "AdminRegion"]),
   createPointVente,
 );
-pointVenteRoutes.get(
-  "/region/:regionId",
-  authenticate,
-  getPointVentesByRegion,
-);
+pointVenteRoutes.get("/region/:regionId", authenticate, getPointVentesByRegion);
 pointVenteRoutes.delete(
   "/:id",
   authenticate,
