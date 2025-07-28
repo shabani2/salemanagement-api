@@ -7,6 +7,7 @@ import {
   getAllProduits,
   getProduitById,
   updateProduit,
+  searchProduit
 } from "../Controllers/produitController";
 import { upload } from "../Middlewares/upload";
 import { updatePointVente } from "../Controllers/pointVenteController";
@@ -31,6 +32,12 @@ router.delete(
   authenticate,
   authorize(["SuperAdmin", "AdminRegion", "AdminPointVente"]),
   deleteProduit,
+);
+router.get(
+  "/search",
+  authenticate,
+  authorize(["SuperAdmin", "AdminRegion", "AdminPointVente"]),
+ searchProduit,
 );
 router.get(
   "/:id",
