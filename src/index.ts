@@ -119,8 +119,8 @@ app.use("/finance/discounts", discountRouter);
 app.use("/finance/settings", financialSettingsRouter);
 
 //routes pour les commandes
-app.use("/api/commandes", commandeRouter);
-app.use("/api/commande-produits", commandeProduitRouter);
+app.use("/commandes", commandeRouter);
+app.use("/commande-produits", commandeProduitRouter);
 // routes pour les exports
 app.use("/export", exportRouter);
 
@@ -141,8 +141,8 @@ app.use(errorHandler);
 
 // 🔥 Lancement du serveur
 const Port = process.env.PORT || 8000;
-//app.listen(Port, () => console.log(`🚀 Server is running on port ${Port}`));
-//app.use(morgan("dev"));
-//console.log("🚀 Express app initialisée");
+app.listen(Port, () => console.log(`🚀 Server is running on port ${Port}`));
+app.use(morgan("dev"));
+console.log("🚀 Express app initialisée");
 
 export default app;

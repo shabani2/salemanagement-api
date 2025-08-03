@@ -33,12 +33,7 @@ router.delete(
   authorize(["SuperAdmin", "AdminRegion", "AdminPointVente"]),
   deleteProduit,
 );
-router.get(
-  "/search",
-  authenticate,
-  authorize(["SuperAdmin", "AdminRegion", "AdminPointVente"]),
-  searchProduit,
-);
+router.get("/search", authenticate, searchProduit);
 router.get(
   "/:id",
   authenticate,

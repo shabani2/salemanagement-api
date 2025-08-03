@@ -6,7 +6,7 @@ import {
   getCommandeProduitsByRegion,
   getCommandeById,
   createCommande,
-  updateCommande,
+  // updateCommande,
   deleteCommande,
 } from "../Controllers/commandeProduitController";
 
@@ -30,7 +30,7 @@ commandeProduitRouter.get(
 commandeProduitRouter.get("/:commandeId", authenticate, getCommandeById);
 
 commandeProduitRouter.post("/", authenticate, createCommande);
-commandeProduitRouter.put("/:commandeId", authenticate, updateCommande);
+//commandeProduitRouter.put("/:commandeId", authenticate, updateCommande);
 commandeProduitRouter.delete("/:commandeId", authenticate, deleteCommande);
 
 export default commandeProduitRouter;

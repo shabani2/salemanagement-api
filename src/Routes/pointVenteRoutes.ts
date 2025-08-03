@@ -5,6 +5,7 @@ import {
   createPointVente,
   deletePointVente,
   getAllPointVentes,
+  getPointVenteById,
   getPointVentesByRegion,
   updatePointVente,
 } from "../Controllers/pointVenteController";
@@ -30,6 +31,7 @@ pointVenteRoutes.delete(
   authorize(["SuperAdmin", "AdminRegion"]),
   deletePointVente,
 );
+pointVenteRoutes.get("/:id", authenticate, getPointVenteById);
 pointVenteRoutes.put(
   "/:id",
   authenticate,

@@ -125,11 +125,14 @@ export interface IOrganisation extends Document {
   updatedAt: Date;
 }
 
-export interface ICommandeProduit {
+export interface ICommandeProduit extends Document {
+  commandeId: mongoose.Types.ObjectId; // nouvelle clé de liaison
   produit: mongoose.Types.ObjectId;
   quantite: number;
   statut: "attente" | "livré" | "annulé";
-  mouvementStockId?: mongoose.Types.ObjectId; // Nullable, rempli quand livré
+  mouvementStockId?: mongoose.Types.ObjectId | null; // optionnel
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 export interface ICommande extends Document {
@@ -138,8 +141,8 @@ export interface ICommande extends Document {
   region?: mongoose.Types.ObjectId;
   pointVente?: mongoose.Types.ObjectId;
   depotCentral?: boolean;
+  produits: mongoose.Types.ObjectId[]; // tableau de références vers CommandeProduit
   statut: "attente" | "livrée" | "annulée";
-  produits: ICommandeProduit[];
   createdAt?: Date;
   updatedAt?: Date;
 }

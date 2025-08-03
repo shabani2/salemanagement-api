@@ -2,11 +2,8 @@
 
 import { Request, Response } from "express";
 import mongoose from "mongoose";
-import { Commande } from "../Models/model";
+import { Commande, CommandeProduit } from "../Models/model";
 
-/**
- * GET /commande-produits/by-user/:userId
- */
 export const getCommandeProduitsByUser = async (
   req: Request,
   res: Response,
@@ -14,30 +11,40 @@ export const getCommandeProduitsByUser = async (
   try {
     const { userId } = req.params;
 
-    const commandes = await Commande.find({ user: userId })
-      .populate("user", "-password")
-      .populate("region")
+    const commandes = await Commande.find({ user: userId });
+
+    const commandeIds = commandes.map((cmd) => cmd._id);
+
+    const produits = await CommandeProduit.find({
+      commandeId: { $in: commandeIds },
+    })
       .populate({
-        path: "pointVente",
-        populate: { path: "region", model: "Region" },
+        path: "produit",
+        populate: { path: "categorie", model: "Categorie" },
+      })
+      .populate("commandeId")
+      .populate({
+        path: "commandeId",
+        populate: {
+          path: "pointVente",
+          populate: { path: "region", model: "Region" },
+        },
       })
       .populate({
-        path: "produits.produit",
-        populate: { path: "categorie", model: "Categorie" },
-      });
+        path: "commandeId",
+        populate: { path: "user", select: "-password" },
+      })
+      .populate("commandeId.region");
 
-    res.status(200).json(commandes);
+    res.status(200).json(produits);
   } catch (error) {
     res.status(400).json({
-      message: "Erreur lors de la récupération des commandes par utilisateur.",
+      message: "Erreur lors de la récupération des produits par utilisateur.",
       error: (error as Error).message,
     });
   }
 };
 
-/**
- * GET /commande-produits/by-pointvente/:pointVenteId
- */
 export const getCommandeProduitsByPointVente = async (
   req: Request,
   res: Response,
@@ -45,31 +52,39 @@ export const getCommandeProduitsByPointVente = async (
   try {
     const { pointVenteId } = req.params;
 
-    const commandes = await Commande.find({ pointVente: pointVenteId })
-      .populate("user", "-password")
-      .populate("region")
+    const commandes = await Commande.find({ pointVente: pointVenteId });
+
+    const commandeIds = commandes.map((cmd) => cmd._id);
+
+    const produits = await CommandeProduit.find({
+      commandeId: { $in: commandeIds },
+    })
       .populate({
-        path: "pointVente",
-        populate: { path: "region", model: "Region" },
+        path: "produit",
+        populate: { path: "categorie", model: "Categorie" },
       })
       .populate({
-        path: "produits.produit",
-        populate: { path: "categorie", model: "Categorie" },
+        path: "commandeId",
+        populate: [
+          { path: "user", select: "-password" },
+          { path: "region" },
+          {
+            path: "pointVente",
+            populate: { path: "region", model: "Region" },
+          },
+        ],
       });
 
-    res.status(200).json(commandes);
+    res.status(200).json(produits);
   } catch (error) {
     res.status(400).json({
       message:
-        "Erreur lors de la récupération des commandes par point de vente.",
+        "Erreur lors de la récupération des produits par point de vente.",
       error: (error as Error).message,
     });
   }
 };
 
-/**
- * GET /commande-produits/by-region/:regionId
- */
 export const getCommandeProduitsByRegion = async (
   req: Request,
   res: Response,
@@ -77,30 +92,38 @@ export const getCommandeProduitsByRegion = async (
   try {
     const { regionId } = req.params;
 
-    const commandes = await Commande.find({ region: regionId })
-      .populate("user", "-password")
-      .populate("region")
+    const commandes = await Commande.find({ region: regionId });
+
+    const commandeIds = commandes.map((cmd) => cmd._id);
+
+    const produits = await CommandeProduit.find({
+      commandeId: { $in: commandeIds },
+    })
       .populate({
-        path: "pointVente",
-        populate: { path: "region", model: "Region" },
+        path: "produit",
+        populate: { path: "categorie", model: "Categorie" },
       })
       .populate({
-        path: "produits.produit",
-        populate: { path: "categorie", model: "Categorie" },
+        path: "commandeId",
+        populate: [
+          { path: "user", select: "-password" },
+          { path: "region" },
+          {
+            path: "pointVente",
+            populate: { path: "region", model: "Region" },
+          },
+        ],
       });
 
-    res.status(200).json(commandes);
+    res.status(200).json(produits);
   } catch (error) {
     res.status(400).json({
-      message: "Erreur lors de la récupération des commandes par région.",
+      message: "Erreur lors de la récupération des produits par région.",
       error: (error as Error).message,
     });
   }
 };
 
-/**
- * GET /commande-produits/:commandeId
- */
 export const getCommandeById = async (req: Request, res: Response) => {
   try {
     const { commandeId } = req.params;
@@ -111,10 +134,6 @@ export const getCommandeById = async (req: Request, res: Response) => {
       .populate({
         path: "pointVente",
         populate: { path: "region", model: "Region" },
-      })
-      .populate({
-        path: "produits.produit",
-        populate: { path: "categorie", model: "Categorie" },
       });
 
     if (!commande) {
@@ -122,7 +141,12 @@ export const getCommandeById = async (req: Request, res: Response) => {
       return;
     }
 
-    res.status(200).json(commande);
+    const produits = await CommandeProduit.find({ commandeId }).populate({
+      path: "produit",
+      populate: { path: "categorie", model: "Categorie" },
+    });
+
+    res.status(200).json({ commande, produits });
   } catch (error) {
     res.status(400).json({
       message: "Erreur lors de la récupération de la commande.",
@@ -131,9 +155,6 @@ export const getCommandeById = async (req: Request, res: Response) => {
   }
 };
 
-/**
- * POST /commande-produits
- */
 export const createCommande = async (req: Request, res: Response) => {
   try {
     const { user, pointVente, region, depotCentral, produits } = req.body;
@@ -145,121 +166,126 @@ export const createCommande = async (req: Request, res: Response) => {
       produits.length === 0
     ) {
       res.status(400).json({ message: "Utilisateur et produits sont requis." });
-      return;
     }
 
-    const hasPointVente = !!pointVente;
-    const hasRegion = !!region;
-    const hasDepotCentral = depotCentral === true;
-
-    if (!hasPointVente && !hasRegion && !hasDepotCentral) {
+    if (!pointVente && !region && !depotCentral) {
       res
         .status(400)
         .json({ message: "La commande doit être liée à une localisation." });
-      return;
     }
-
-    const commandeProduits = produits.map((p) => ({
-      produit: new mongoose.Types.ObjectId(p.produit),
-      quantite: p.quantite,
-      statut: "attente",
-    }));
 
     const numero = `CMD-${Date.now()}`;
 
-    const commande = new Commande({
+    const commande = await new Commande({
       numero,
       user,
       pointVente,
       region,
       depotCentral: !!depotCentral,
-      produits: commandeProduits,
       statut: "attente",
-    });
+    }).save();
 
-    await commande.save();
+    interface ProduitInput {
+      produit: string;
+      quantite: number;
+    }
 
-    const populated = await Commande.findById(commande._id)
+    interface CommandeProduitInsert {
+      commandeId: mongoose.Types.ObjectId;
+      produit: mongoose.Types.ObjectId;
+      quantite: number;
+      statut: string;
+    }
+
+    const produitsInput: ProduitInput[] = produits as ProduitInput[];
+
+    const commandeProduits: CommandeProduitInsert[] =
+      await CommandeProduit.insertMany(
+        produitsInput.map(
+          (p: ProduitInput): CommandeProduitInsert => ({
+            commandeId: commande._id,
+            produit: new mongoose.Types.ObjectId(p.produit),
+            quantite: p.quantite,
+            statut: "attente",
+          }),
+        ),
+      );
+
+    const fullCommande = await Commande.findById(commande._id)
       .populate("user", "-password")
       .populate("region")
       .populate({
         path: "pointVente",
         populate: { path: "region", model: "Region" },
-      })
-      .populate({
-        path: "produits.produit",
-        populate: { path: "categorie", model: "Categorie" },
       });
 
-    res.status(201).json(populated);
+    res
+      .status(201)
+      .json({ commande: fullCommande, produits: commandeProduits });
     return;
   } catch (error) {
-    res
-      .status(400)
-      .json({
-        message: "Erreur lors de la création.",
-        error: (error as Error).message,
-      });
-    return;
+    res.status(400).json({
+      message: "Erreur lors de la création.",
+      error: (error as Error).message,
+    });
   }
 };
 
-/**
- * PUT /commande-produits/:commandeId
- */
-export const updateCommande = async (req: Request, res: Response) => {
+export const deleteCommande = async (req: Request, res: Response) => {
   try {
     const { commandeId } = req.params;
-    const updateData = req.body;
 
-    const updated = await Commande.findByIdAndUpdate(commandeId, updateData, {
-      new: true,
-    })
-      .populate("user", "-password")
-      .populate("region")
-      .populate({
-        path: "pointVente",
-        populate: { path: "region", model: "Region" },
-      })
-      .populate({
-        path: "produits.produit",
-        populate: { path: "categorie", model: "Categorie" },
-      });
+    const deleted = await Commande.findByIdAndDelete(commandeId);
+    if (!deleted) {
+      res.status(404).json({ message: "Commande non trouvée." });
+      return;
+    }
 
-    if (!updated) res.status(404).json({ message: "Commande non trouvée." });
+    await CommandeProduit.deleteMany({ commandeId });
 
-    res.status(200).json(updated);
+    res
+      .status(200)
+      .json({ message: "Commande et produits supprimés avec succès." });
     return;
   } catch (error) {
-    res
-      .status(400)
-      .json({
-        message: "Erreur lors de la mise à jour.",
-        error: (error as Error).message,
-      });
-    return;
+    res.status(400).json({
+      message: "Erreur lors de la suppression.",
+      error: (error as Error).message,
+    });
+  }
+};
+
+// PUT /commande-produits/:id
+export const updateCommandeProduit = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { produit, quantite, statut, mouvementStockId } = req.body;
+
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ message: "ID invalide" });
+  }
+
+  try {
+    const updated = await CommandeProduit.findByIdAndUpdate(
+      id,
+      {
+        ...(produit && { produit }),
+        ...(quantite !== undefined && { quantite }),
+        ...(statut && { statut }),
+        ...(mouvementStockId !== undefined && { mouvementStockId }),
+      },
+      { new: true },
+    );
+
+    if (!updated) {
+      return res.status(404).json({ message: "CommandeProduit non trouvé" });
+    }
+
+    res.status(200).json(updated);
+  } catch (error) {
+    res.status(500).json({ message: "Erreur lors de la mise à jour", error });
   }
 };
 
 /**
  * DELETE /commande-produits/:commandeId
  */
-export const deleteCommande = async (req: Request, res: Response) => {
-  try {
-    const { commandeId } = req.params;
-
-    const deleted = await Commande.findByIdAndDelete(commandeId);
-    if (!deleted) res.status(404).json({ message: "Commande non trouvée." });
-
-    res.status(200).json({ message: "Commande supprimée avec succès." });
-    return;
-  } catch (error) {
-    res
-      .status(400)
-      .json({
-        message: "Erreur lors de la suppression.",
-        error: (error as Error).message,
-      });
-    return;
-  }
-};

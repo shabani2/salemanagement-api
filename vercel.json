@@ -11,5 +11,14 @@
       "src": "/(.*)",
       "dest": "src/app/index.ts"
     }
-  ]
+  ],
+  "env": {
+    "NODE_ENV": "production",
+    "MONGO_URI_DEV": "mongodb+srv://sagadi123:Jeremie29%3A11@cluster0.x7npsbm.mongodb.net/sale-management?retryWrites=true&w=majority&appName=Cluster0"
+  },
+  "functions": {
+    "src/app/index.ts": {
+      "maxDuration": 10
+    }
+  }
 }

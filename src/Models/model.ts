@@ -342,6 +342,11 @@ export const Organisations = mongoose.model<IOrganisation>(
 
 export const CommandeProduitSchema = new Schema<ICommandeProduit>(
   {
+    commandeId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Commande",
+      required: true,
+    },
     produit: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Produit",
@@ -362,14 +367,15 @@ export const CommandeProduitSchema = new Schema<ICommandeProduit>(
       default: null,
     },
   },
-  { _id: false },
+  { timestamps: true },
 );
+
 export const CommandeProduit = mongoose.model<ICommandeProduit>(
   "CommandeProduit",
   CommandeProduitSchema,
 );
 
-const CommandeSchema = new Schema<ICommande>(
+export const CommandeSchema = new Schema<ICommande>(
   {
     numero: {
       type: String,
@@ -393,12 +399,17 @@ const CommandeSchema = new Schema<ICommande>(
       type: Boolean,
       default: false,
     },
+    produits: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "CommandeProduit",
+      },
+    ],
     statut: {
       type: String,
       enum: ["attente", "livrée", "annulée"],
       default: "attente",
     },
-    produits: [CommandeProduitSchema],
   },
   { timestamps: true },
 );

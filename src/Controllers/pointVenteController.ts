@@ -59,7 +59,7 @@ export const getPointVenteById = async (req: Request, res: Response) => {
     const { id } = req.params;
     const pointVente = await PointVente.findById(id);
     if (!pointVente) {
-      return res.status(404).json({ message: "Point de vente non trouvé" });
+      res.status(404).json({ message: "Point de vente non trouvé" });
     }
     res.json(pointVente);
   } catch (err) {

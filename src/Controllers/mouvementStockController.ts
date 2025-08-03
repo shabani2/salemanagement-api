@@ -1,5 +1,11 @@
 import { Request, Response } from "express";
-import { Commande, MouvementStock, PointVente, Produit } from "../Models/model";
+import {
+  Commande,
+  CommandeProduit,
+  MouvementStock,
+  PointVente,
+  Produit,
+} from "../Models/model";
 import mongoose, { PipelineStage } from "mongoose";
 
 export const getAllMouvementsStock = async (req: Request, res: Response) => {
@@ -1068,7 +1074,6 @@ export const livrerProduitCommande = async (req: Request, res: Response) => {
       depotCentral,
     } = req.body;
 
-    // Validation obligatoire de base
     if (!commandeId || !produit || !quantite || !montant || !user) {
       res.status(400).json({
         message: "commandeId, produit, quantite, montant et user sont requis.",
@@ -1076,7 +1081,6 @@ export const livrerProduitCommande = async (req: Request, res: Response) => {
       return;
     }
 
-    // Validation : rattachement logique obligatoire
     const hasPointVente = !!pointVente;
     const hasRegion = !!region;
     const hasDepotCentral = depotCentral === true;
@@ -1095,10 +1099,12 @@ export const livrerProduitCommande = async (req: Request, res: Response) => {
       return;
     }
 
-    // Recherche du produit dans la commande
-    const produitCommande = commande.produits.find(
-      (p) => p.produit.toString() === produit && p.statut === "attente",
-    );
+    // Recherche du produit dans la commande via le modèle CommandeProduit
+    const produitCommande = await CommandeProduit.findOne({
+      commande: commandeId,
+      produit,
+      statut: "attente",
+    });
 
     if (!produitCommande) {
       res.status(400).json({
@@ -1115,7 +1121,6 @@ export const livrerProduitCommande = async (req: Request, res: Response) => {
       return;
     }
 
-    // Création du mouvement stock
     const mouvementData: any = {
       produit: new mongoose.Types.ObjectId(produit),
       quantite,
@@ -1134,17 +1139,21 @@ export const livrerProduitCommande = async (req: Request, res: Response) => {
     const mouvement = new MouvementStock(mouvementData);
     await mouvement.save();
 
-    // Mise à jour du produit dans la commande
+    // Mise à jour du produit livré
     produitCommande.statut = "livré";
     produitCommande.mouvementStockId = mouvement._id;
+    await produitCommande.save();
 
-    // Si tous les produits sont livrés, mettre à jour le statut global
-    const tousLivrés = commande.produits.every((p) => p.statut === "livré");
+    // Vérification de tous les produits de la commande
+    const produitsCommande = await CommandeProduit.find({
+      commande: commandeId,
+    });
+    const tousLivrés = produitsCommande.every((p) => p.statut === "livré");
+
     if (tousLivrés) {
       commande.statut = "livrée";
+      await commande.save();
     }
-
-    await commande.save();
 
     const populatedMouvement = await MouvementStock.findById(mouvement._id)
       .populate("produit")
@@ -1160,12 +1169,10 @@ export const livrerProduitCommande = async (req: Request, res: Response) => {
       message: "Produit livré avec succès.",
       livraison: populatedMouvement,
     });
-    return;
   } catch (err) {
     res.status(400).json({
       message: "Erreur lors de la livraison du produit",
       error: (err as Error).message,
     });
-    return;
   }
 };
