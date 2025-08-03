@@ -3,12 +3,13 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node dist/api/index.ts",
-    "heroku-postbuild": "npm run build",
-    "build": "tsc",
+    "test": "echo \"Error: no test specified\" && exit 1",     
     "dev": "ts-node src/index.ts",
-    "server": "nodemon src/index.ts"
+    "server": "nodemon src/index.ts",
+    "build": "tsc",                       
+    "heroku-postbuild": "npm run build",  
+    "start": "node dist/index.js",       
+    "tsc": "tsc"
   },
   "keywords": [],
   "author": "",
@@ -32,7 +33,7 @@
     "ts-jest": "^29.3.2",
     "ts-node": "^10.9.2",
     "tsx": "^4.20.3",
-    "typescript": "^5.8.3"
+    "typescript": "^5.9.2"
   },
   "dependencies": {
     "@vendia/serverless-express": "^4.10.2",
@@ -54,7 +55,6 @@
     "pdfkit": "^0.17.0",
     "salemanagement-api": "file:",
     "serverless-http": "^3.2.0",
-    "tsc": "^2.0.4",
     "xlsx": "^0.18.5"
   }
 }
