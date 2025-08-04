@@ -44,8 +44,8 @@ organisationRoutes.get(
 
 organisationRoutes.post(
   "/",
-  authenticate,
-  authorize(["SuperAdmin"]),
+  // authenticate,
+  // authorize(["SuperAdmin"]),
   upload.single("logo"),
   createOrganisation,
 );

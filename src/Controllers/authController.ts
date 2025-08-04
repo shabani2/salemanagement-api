@@ -98,9 +98,9 @@ export const register = async (
     }
 
     const newUser = new User(userPayload);
-    await newUser.save();
+    const createdUser = await newUser.save();
 
-    res.status(201).json({ message: "Utilisateur créé avec succès" });
+    res.status(201).json(createdUser);
   } catch (err: unknown) {
     console.error("Erreur lors de l'inscription:", err);
     if (err instanceof Error) {

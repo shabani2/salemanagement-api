@@ -130,12 +130,10 @@ const getMouvementStockByRegion = (req, res) =>
       res.json(mouvementsFiltres);
     } catch (err) {
       console.error("Erreur dans getMouvementStockByRegion:", err);
-      res
-        .status(500)
-        .json({
-          message: "Erreur interne",
-          error: err === null || err === void 0 ? void 0 : err.message,
-        });
+      res.status(500).json({
+        message: "Erreur interne",
+        error: err === null || err === void 0 ? void 0 : err.message,
+      });
     }
   });
 exports.getMouvementStockByRegion = getMouvementStockByRegion;
@@ -942,12 +940,10 @@ const getMouvementStockByRegionPage = (req, res) =>
       });
     } catch (err) {
       console.error("Erreur dans getMouvementStockByRegion:", err);
-      res
-        .status(500)
-        .json({
-          message: "Erreur interne",
-          error: err === null || err === void 0 ? void 0 : err.message,
-        });
+      res.status(500).json({
+        message: "Erreur interne",
+        error: err === null || err === void 0 ? void 0 : err.message,
+      });
     }
   });
 exports.getMouvementStockByRegionPage = getMouvementStockByRegionPage;
@@ -1086,12 +1082,10 @@ const getMouvementsStockByRegionOptimizedPage = (req, res) =>
       });
     } catch (err) {
       console.error("Erreur dans getMouvementStockByRegionOptimized:", err);
-      res
-        .status(500)
-        .json({
-          message: "Erreur interne",
-          error: err === null || err === void 0 ? void 0 : err.message,
-        });
+      res.status(500).json({
+        message: "Erreur interne",
+        error: err === null || err === void 0 ? void 0 : err.message,
+      });
     }
   });
 exports.getMouvementsStockByRegionOptimizedPage =

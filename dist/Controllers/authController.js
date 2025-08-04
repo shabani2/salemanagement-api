@@ -124,12 +124,10 @@ const register = (req, res) =>
     } catch (err) {
       console.error("Erreur lors de l'inscription:", err);
       if (err instanceof Error) {
-        res
-          .status(500)
-          .json({
-            message: "Erreur lors de l'inscription",
-            error: err.message,
-          });
+        res.status(500).json({
+          message: "Erreur lors de l'inscription",
+          error: err.message,
+        });
       } else {
         res.status(500).json({ message: "Une erreur inconnue est survenue" });
       }
