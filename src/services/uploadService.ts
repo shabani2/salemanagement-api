@@ -5,11 +5,12 @@ import { MulterFile } from "../Models/multerType";
 import multer from "multer";
 
 // Configuration GCS
+import { getGoogleCredentialsFile } from "./utils/getGcpCredentials";
+
+const keyFilename = getGoogleCredentialsFile();
+
 export const storage = new Storage({
-  keyFilename: path.join(
-    __dirname,
-    "../googleCloudConfig/agricaptest-fa42ab744cc7.json",
-  ),
+  keyFilename,
 });
 const bucket = storage.bucket(process.env.GOOGLE_BUCKET_NAME || "");
 
