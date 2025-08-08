@@ -38,14 +38,14 @@ export const register = async (
     }
 
     // Upload image
-     let imagePath = "";
+    let imagePath = "";
     if (req.file) {
       try {
         imagePath = await uploadFile(req.file, role);
       } catch (uploadError) {
         console.error("Erreur d'upload:", uploadError);
         res.status(500).json({ message: "Échec de l'upload de l'image" });
-        return; 
+        return;
       }
     }
 
