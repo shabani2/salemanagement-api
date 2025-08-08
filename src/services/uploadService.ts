@@ -86,5 +86,3 @@ export const deleteFile = async (filePath: string) => {
 
   await storage.bucket(bucketName).file(fileName).delete();
 };
-
-

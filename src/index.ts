@@ -34,25 +34,24 @@ const app = express();
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:5174",
-  "https://agricap-ui-429dded64762.herokuapp.com/",
+  "https://agricap-ui-429dded64762.herokuapp.com",
   "https://www.agrecavente.online",
   "http://localhost:8080",
   "https://inaf-vente.netlify.app",
 ];
 
-// 🔹 Options CORS
 export const corsOptions: cors.CorsOptions = {
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (!origin) return callback(null, true); // postman, curl, etc.
+    // ignore slash à la fin
+    const originSansSlash = origin.endsWith("/") ? origin.slice(0, -1) : origin;
+    if (allowedOrigins.includes(originSansSlash)) {
       return callback(null, true);
     }
     return callback(new Error("Not allowed by CORS"));
   },
   methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
 };
-
-// 🔥 CORS doit être activé avant TOUTES les routes
-app.use(cors(corsOptions));
 
 // 🛠 Middleware JSON (après CORS)
 app.use(express.json({ limit: "20mb" }));
