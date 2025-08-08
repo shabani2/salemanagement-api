@@ -19,7 +19,7 @@ export const uploadFile = async (
   directory: string,
 ): Promise<string> => {
   // Mode développement: sauvegarde locale
-  if (process.env.NODE_ENV === "development") {
+  if (process.env.NODE_ENV === "production") {
     const uploadDir = path.join(__dirname, `../../assets/${directory}`);
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
@@ -60,7 +60,7 @@ export const uploadFile = async (
 
 export const deleteFile = async (filePath: string) => {
   // En développement: suppression locale
-  if (process.env.NODE_ENV === "development") {
+  if (process.env.NODE_ENV === "local") {
     const fullPath = path.join(__dirname, `../../${filePath}`);
     if (fs.existsSync(fullPath)) {
       fs.unlinkSync(fullPath);
@@ -73,7 +73,7 @@ export const deleteFile = async (filePath: string) => {
   if (!bucketName) throw new Error("Bucket name non configuré");
 
   const storage = new Storage({
-    keyFilename: path.join(__dirname, "../../chemin/service-account.json"),
+    keyFilename: path.join(__dirname, "../../path/service-account.json"),
   });
 
   // Extraire le nom du fichier depuis l'URL
@@ -87,10 +87,4 @@ export const deleteFile = async (filePath: string) => {
   await storage.bucket(bucketName).file(fileName).delete();
 };
 
-// export const storage = multer.memoryStorage(); // Utilisez memoryStorage pour GCS
-// const upload = multer({
-//   storage: storage,
-//   limits: {
-//     fileSize: 5 * 1024 * 1024 // 5MB
-//   }
-// });
+
