@@ -4,6 +4,7 @@ import fs from "fs";
 import { User, UserRoleType } from "../Models/model";
 import { generateToken } from "../Utils/jwt";
 import { UserRole } from "../Utils/constant";
+import { uploadFile } from "../services/uploadService";
 
 interface MulterRequest extends Request {
   file?: Express.Multer.File;
@@ -37,15 +38,15 @@ export const register = async (
     }
 
     // Upload image
-    let imagePath = "";
+     let imagePath = "";
     if (req.file) {
-      const uploadDir = path.join(__dirname, `../assets/${role}`);
-      if (!fs.existsSync(uploadDir)) {
-        fs.mkdirSync(uploadDir, { recursive: true });
+      try {
+        imagePath = await uploadFile(req.file, role);
+      } catch (uploadError) {
+        console.error("Erreur d'upload:", uploadError);
+        res.status(500).json({ message: "Échec de l'upload de l'image" });
+        return; 
       }
-      imagePath = `assets/${role}/${req.file.filename}`;
-      const destinationPath = path.join(uploadDir, req.file.filename);
-      fs.renameSync(req.file.path, destinationPath);
     }
 
     // Définir les règles selon le rôle
