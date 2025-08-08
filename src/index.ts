@@ -30,15 +30,18 @@ import commandeRouter from "./Routes/commandeRoutes";
 dotenv.config();
 const app = express();
 
-app.use(cors(corsOptions));      // 👉 CORS doit venir AVANT
-app.options("*", cors(corsOptions));
+app.use(cors({
+  origin: "*", // 👉 Autorise toutes les origines
+  methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
+}));
+app.options("*", cors());
 
 // 🛠 Middleware JSON (après CORS)
 app.use(express.json({ limit: "20mb" }));
 app.use(express.urlencoded({ limit: "20mb", extended: true }));
 
 // 🔥 Vérifier que les requêtes OPTIONS passent bien
-app.options("*", cors(corsOptions)); // Autoriser les préflight requests
+//app.options("*", cors(corsOptions)); // Autoriser les préflight requests
 
 // Connexion à MongoDB
 connectDB();
