@@ -30,28 +30,8 @@ import commandeRouter from "./Routes/commandeRoutes";
 dotenv.config();
 const app = express();
 
-// 🔹 Liste des domaines autorisés
-const allowedOrigins = [
-  "http://localhost:5173",
-  "http://localhost:5174",
-  "https://agricap-ui-429dded64762.herokuapp.com",
-  "https://www.agrecavente.online",
-  "http://localhost:8080",
-  "https://inaf-vente.netlify.app",
-];
-
-export const corsOptions: cors.CorsOptions = {
-  origin: (origin, callback) => {
-    if (!origin) return callback(null, true); // postman, curl, etc.
-    // ignore slash à la fin
-    const originSansSlash = origin.endsWith("/") ? origin.slice(0, -1) : origin;
-    if (allowedOrigins.includes(originSansSlash)) {
-      return callback(null, true);
-    }
-    return callback(new Error("Not allowed by CORS"));
-  },
-  methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
-};
+app.use(cors(corsOptions));      // 👉 CORS doit venir AVANT
+app.options("*", cors(corsOptions));
 
 // 🛠 Middleware JSON (après CORS)
 app.use(express.json({ limit: "20mb" }));
