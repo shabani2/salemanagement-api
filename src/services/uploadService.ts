@@ -13,11 +13,14 @@ if (process.env.NODE_ENV === "production") {
   storage = new Storage();
 }
 
+/**
+ * Upload d'un fichier en local (développement) ou sur GCS (production)
+ */
 export const uploadFile = async (
   file: MulterFile,
   directory: string
 ): Promise<string> => {
-  // Mode développement/local : stockage sur disque
+  // LOCAL
   if (process.env.NODE_ENV !== "production") {
     const uploadDir = path.join(__dirname, `../../assets/${directory}`);
     if (!fs.existsSync(uploadDir)) {
@@ -30,16 +33,20 @@ export const uploadFile = async (
 
     const destinationPath = path.join(uploadDir, file.filename);
     fs.renameSync(file.path, destinationPath);
+
     return `assets/${directory}/${file.filename}`;
   }
 
-  // Mode production : upload vers Google Cloud Storage
+  // PRODUCTION
   const bucketName = process.env.GOOGLE_BUCKET_NAME;
   if (!bucketName) throw new Error("Bucket name non configuré");
 
   const bucket = storage.bucket(bucketName);
   const blob = bucket.file(`${directory}/${Date.now()}_${file.originalname}`);
-  const blobStream = blob.createWriteStream();
+  const blobStream = blob.createWriteStream({
+    resumable: false,
+    contentType: file.mimetype || "application/octet-stream",
+  });
 
   return new Promise((resolve, reject) => {
     blobStream.on("error", (err) => {
@@ -57,26 +64,27 @@ export const uploadFile = async (
       }
     });
 
-    // Cas 1 : le fichier est en mémoire (memoryStorage)
+    // En prod → multer.memoryStorage() → file.buffer doit exister
     if (file.buffer) {
       blobStream.end(file.buffer);
       return;
     }
 
-    // Cas 2 : le fichier est sur disque (diskStorage)
+    // Sécurité : si file.buffer absent, essayer via chemin disque
     if (file.path && fs.existsSync(file.path)) {
       fs.createReadStream(file.path).pipe(blobStream);
       return;
     }
 
-    // Cas 3 : aucun des deux → erreur
     reject(new Error("Le fichier n'a ni buffer ni chemin local pour l'upload."));
   });
 };
 
-
+/**
+ * Suppression d'un fichier en local ou sur GCS
+ */
 export const deleteFile = async (filePath: string): Promise<void> => {
-  // Mode développement: suppression locale
+  // LOCAL
   if (process.env.NODE_ENV !== "production") {
     const fullPath = path.join(__dirname, `../../${filePath}`);
     if (fs.existsSync(fullPath)) {
@@ -85,14 +93,18 @@ export const deleteFile = async (filePath: string): Promise<void> => {
     return;
   }
 
-  // Mode production: suppression depuis GCS
+  // PRODUCTION
   const bucketName = process.env.GOOGLE_BUCKET_NAME;
   if (!bucketName) throw new Error("Bucket name non configuré");
 
-  // Extraction du nom du fichier depuis l'URL
-  const fileName = filePath
-    .replace(`https://storage.googleapis.com/${bucketName}/`, "")
-    .trim();
+  const fileName = filePath.replace(
+    `https://storage.googleapis.com/${bucketName}/`,
+    ""
+  );
 
-  await storage.bucket(bucketName).file(fileName).delete();
+  try {
+    await storage.bucket(bucketName).file(fileName).delete();
+  } catch (err) {
+    console.error("Erreur lors de la suppression du fichier sur GCS:", err);
+  }
 };
