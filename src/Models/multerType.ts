@@ -1,5 +1,4 @@
 import { Request } from "express";
-import { File as MulterFile } from "multer";
 
 export interface MulterFile {
   fieldname: string;
@@ -7,12 +6,14 @@ export interface MulterFile {
   encoding: string;
   mimetype: string;
   size: number;
-  destination: string;
+  destination?: string;
   filename: string;
-  path: string;
-  buffer: Buffer;
+  path?: string;
+  buffer?: Buffer;
 }
 
 export interface MulterRequest extends Request {
-  file?: Express.MulterFile;
+  // Remplacer 'file' par un autre nom pour éviter le conflit, ou rendre 'file' optionnel sans héritage direct
+  multerFile?: MulterFile;
+  multerFiles?: MulterFile[];
 }

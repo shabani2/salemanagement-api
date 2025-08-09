@@ -32,18 +32,12 @@ var __awaiter =
       step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
   };
-var __importDefault =
-  (this && this.__importDefault) ||
-  function (mod) {
-    return mod && mod.__esModule ? mod : { default: mod };
-  };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.logout = exports.login = exports.register = void 0;
-const path_1 = __importDefault(require("path"));
-const fs_1 = __importDefault(require("fs"));
 const model_1 = require("../Models/model");
 const jwt_1 = require("../Utils/jwt");
 const constant_1 = require("../Utils/constant");
+const uploadService_1 = require("../services/uploadService");
 const register = (req, res) =>
   __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -69,16 +63,13 @@ const register = (req, res) =>
       // Upload image
       let imagePath = "";
       if (req.file) {
-        const uploadDir = path_1.default.join(__dirname, `../assets/${role}`);
-        if (!fs_1.default.existsSync(uploadDir)) {
-          fs_1.default.mkdirSync(uploadDir, { recursive: true });
+        try {
+          imagePath = yield (0, uploadService_1.uploadFile)(req.file, role);
+        } catch (uploadError) {
+          console.error("Erreur d'upload:", uploadError);
+          res.status(500).json({ message: "Échec de l'upload de l'image" });
+          return;
         }
-        imagePath = `assets/${role}/${req.file.filename}`;
-        const destinationPath = path_1.default.join(
-          uploadDir,
-          req.file.filename,
-        );
-        fs_1.default.renameSync(req.file.path, destinationPath);
       }
       // Définir les règles selon le rôle
       const noRegionNoPV = ["SuperAdmin", "Client"];
@@ -119,15 +110,17 @@ const register = (req, res) =>
         userPayload.pointVente = pointVente;
       }
       const newUser = new model_1.User(userPayload);
-      yield newUser.save();
-      res.status(201).json({ message: "Utilisateur créé avec succès" });
+      const createdUser = yield newUser.save();
+      res.status(201).json(createdUser);
     } catch (err) {
       console.error("Erreur lors de l'inscription:", err);
       if (err instanceof Error) {
-        res.status(500).json({
-          message: "Erreur lors de l'inscription",
-          error: err.message,
-        });
+        res
+          .status(500)
+          .json({
+            message: "Erreur lors de l'inscription",
+            error: err.message,
+          });
       } else {
         res.status(500).json({ message: "Une erreur inconnue est survenue" });
       }

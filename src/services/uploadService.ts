@@ -15,13 +15,16 @@ if (process.env.NODE_ENV === "production") {
 
 export const uploadFile = async (
   file: MulterFile,
-  directory: string
+  directory: string,
 ): Promise<string> => {
-  // Mode développement: sauvegarde locale
   if (process.env.NODE_ENV !== "production") {
     const uploadDir = path.join(__dirname, `../../assets/${directory}`);
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
+    }
+
+    if (!file.path) {
+      throw new Error("Le fichier n'a pas de chemin local 'path'.");
     }
 
     const destinationPath = path.join(uploadDir, file.filename);
@@ -29,7 +32,7 @@ export const uploadFile = async (
     return `assets/${directory}/${file.filename}`;
   }
 
-  // Mode production: upload vers GCS
+  // Production - upload vers GCS
   const bucketName = process.env.GOOGLE_BUCKET_NAME;
   if (!bucketName) throw new Error("Bucket name non configuré");
 
@@ -48,6 +51,11 @@ export const uploadFile = async (
         reject(error);
       }
     });
+
+    if (!file.buffer) {
+      reject(new Error("Le fichier n'a pas de buffer à uploader."));
+      return;
+    }
 
     blobStream.end(file.buffer);
   });
@@ -68,10 +76,9 @@ export const deleteFile = async (filePath: string): Promise<void> => {
   if (!bucketName) throw new Error("Bucket name non configuré");
 
   // Extraction du nom du fichier depuis l'URL
-  const fileName =
-    filePath
-      .replace(`https://storage.googleapis.com/${bucketName}/`, "")
-      .trim();
+  const fileName = filePath
+    .replace(`https://storage.googleapis.com/${bucketName}/`, "")
+    .trim();
 
   await storage.bucket(bucketName).file(fileName).delete();
 };

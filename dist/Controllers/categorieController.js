@@ -32,21 +32,14 @@ var __awaiter =
       step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
   };
-var __importDefault =
-  (this && this.__importDefault) ||
-  function (mod) {
-    return mod && mod.__esModule ? mod : { default: mod };
-  };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.updateCategorie =
-  exports.getCategorieById =
   exports.deleteCategorie =
   exports.createCategorie =
   exports.getAllCategories =
     void 0;
 const model_1 = require("../Models/model");
-const fs_1 = __importDefault(require("fs"));
-const path_1 = __importDefault(require("path"));
+const uploadService_1 = require("../services/uploadService");
 const getAllCategories = (req, res) =>
   __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -62,27 +55,17 @@ const createCategorie = (req, res) =>
     try {
       const { nom, type } = req.body;
       let imagePath = "";
-      const categorieDir = path_1.default.join(
-        __dirname,
-        "./../assets/categorie",
-      );
-      // Vérifier et créer le dossier si nécessaire
-      if (!fs_1.default.existsSync(categorieDir)) {
-        fs_1.default.mkdirSync(categorieDir, { recursive: true });
-      }
       if (req.file) {
-        imagePath = `../assets/categorie/${req.file.filename}`;
-        const destinationPath = path_1.default.join(
-          categorieDir,
-          req.file.filename,
+        imagePath = yield (0, uploadService_1.uploadFile)(
+          req.file,
+          "categorie",
         );
-        // Déplacer le fichier vers le bon dossier (optionnel si Multer gère déjà ça)
-        fs_1.default.renameSync(req.file.path, destinationPath);
       }
       const categorie = new model_1.Categorie({ nom, type, image: imagePath });
       yield categorie.save();
       res.status(201).json(categorie);
     } catch (err) {
+      console.error("Erreur création catégorie:", err);
       res
         .status(400)
         .json({ message: "Erreur lors de la création", error: err });
@@ -101,23 +84,6 @@ const deleteCategorie = (req, res) =>
     }
   });
 exports.deleteCategorie = deleteCategorie;
-const getCategorieById = (req, res) =>
-  __awaiter(void 0, void 0, void 0, function* () {
-    try {
-      const { id } = req.params;
-      const categorie = yield model_1.Categorie.findById(id);
-      if (!categorie) {
-        res.status(404).json({ message: "Catégorie non trouvée" });
-        return;
-      }
-      res.json(categorie);
-      return;
-    } catch (err) {
-      res.status(500).json({ message: "Erreur interne", error: err });
-      return;
-    }
-  });
-exports.getCategorieById = getCategorieById;
 const updateCategorie = (req, res) =>
   __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -128,29 +94,24 @@ const updateCategorie = (req, res) =>
         res.status(404).json({ message: "Catégorie non trouvée" });
         return;
       }
-      // Si un nouveau fichier est uploadé, on gère l’upload et on supprime l’ancienne image
+      // Si un nouveau fichier est uploadé
       if (req.file) {
-        const categorieDir = path_1.default.join(
-          __dirname,
-          "./../assets/categorie",
-        );
-        if (!fs_1.default.existsSync(categorieDir))
-          fs_1.default.mkdirSync(categorieDir, { recursive: true });
-        const newImagePath = `../assets/categorie/${req.file.filename}`;
-        fs_1.default.renameSync(
-          req.file.path,
-          path_1.default.join(categorieDir, req.file.filename),
-        );
+        // Supprimer l'ancienne image si elle existe
         if (categorie.image) {
-          const oldImageFullPath = path_1.default.join(
-            __dirname,
-            "..",
-            categorie.image,
-          );
-          if (fs_1.default.existsSync(oldImageFullPath))
-            fs_1.default.unlinkSync(oldImageFullPath);
+          try {
+            yield (0, uploadService_1.deleteFile)(categorie.image);
+          } catch (deleteErr) {
+            console.warn(
+              "Impossible de supprimer l'ancienne image:",
+              deleteErr,
+            );
+          }
         }
-        categorie.image = newImagePath;
+        // Upload de la nouvelle image
+        categorie.image = yield (0, uploadService_1.uploadFile)(
+          req.file,
+          "categorie",
+        );
       }
       // Mise à jour des champs
       if (nom !== undefined) categorie.nom = nom;
@@ -158,6 +119,7 @@ const updateCategorie = (req, res) =>
       yield categorie.save();
       res.json(categorie);
     } catch (err) {
+      console.error("Erreur mise à jour catégorie:", err);
       res
         .status(500)
         .json({ message: "Erreur lors de la mise à jour", error: err });

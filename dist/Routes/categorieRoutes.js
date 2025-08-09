@@ -17,6 +17,14 @@ router.get(
   // authorize(["SuperAdmin", "AdminRegion", "AdminPointVente"]),
   categorieController_1.getAllCategories,
 );
+// router.get(
+//   "/:id",
+//   authenticate,
+//   authorize(["SuperAdmin", "AdminRegion", "AdminPointVente"]),
+//   upload.single("image"),
+//    getCategorieById
+//  ,
+// );
 router.post(
   "/",
   auth_1.authenticate,

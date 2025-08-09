@@ -17,7 +17,7 @@ export function getGoogleCredentialsFile(): string {
 
   const credentialsPath = path.join(
     __dirname,
-    "../tmp/gcloud-credentials.json"
+    "../tmp/gcloud-credentials.json",
   );
 
   fs.mkdirSync(path.dirname(credentialsPath), { recursive: true });

@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import { Categorie, Produit } from "../Models/model";
 import fs from "fs";
 import path from "path";
+import { deleteFile, uploadFile } from "../services/uploadService";
+import { MulterRequest } from "../Models/multerType";
 
 export const getAllCategories = async (req: Request, res: Response) => {
   try {
@@ -12,28 +14,21 @@ export const getAllCategories = async (req: Request, res: Response) => {
   }
 };
 
-export const createCategorie = async (req: Request, res: Response) => {
+export const createCategorie = async (req: MulterRequest, res: Response) => {
   try {
     const { nom, type } = req.body;
     let imagePath = "";
-    const categorieDir = path.join(__dirname, "./../assets/categorie");
-
-    // Vérifier et créer le dossier si nécessaire
-    if (!fs.existsSync(categorieDir)) {
-      fs.mkdirSync(categorieDir, { recursive: true });
-    }
 
     if (req.file) {
-      imagePath = `../assets/categorie/${req.file.filename}`;
-      const destinationPath = path.join(categorieDir, req.file.filename);
-
-      // Déplacer le fichier vers le bon dossier (optionnel si Multer gère déjà ça)
-      fs.renameSync(req.file.path, destinationPath);
+      imagePath = await uploadFile(req.file, "categorie");
     }
+
     const categorie = new Categorie({ nom, type, image: imagePath });
     await categorie.save();
+
     res.status(201).json(categorie);
   } catch (err) {
+    console.error("Erreur création catégorie:", err);
     res.status(400).json({ message: "Erreur lors de la création", error: err });
   }
 };
@@ -49,24 +44,8 @@ export const deleteCategorie = async (req: Request, res: Response) => {
   }
 };
 
-export const getCategorieById = async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const categorie = await Categorie.findById(id);
-    if (!categorie) {
-      res.status(404).json({ message: "Catégorie non trouvée" });
-      return;
-    }
-    res.json(categorie);
-    return;
-  } catch (err) {
-    res.status(500).json({ message: "Erreur interne", error: err });
-    return;
-  }
-};
-
 export const updateCategorie = async (
-  req: Request,
+  req: MulterRequest,
   res: Response,
 ): Promise<void> => {
   try {
@@ -79,20 +58,19 @@ export const updateCategorie = async (
       return;
     }
 
-    // Si un nouveau fichier est uploadé, on gère l’upload et on supprime l’ancienne image
+    // Si un nouveau fichier est uploadé
     if (req.file) {
-      const categorieDir = path.join(__dirname, "./../assets/categorie");
-      if (!fs.existsSync(categorieDir))
-        fs.mkdirSync(categorieDir, { recursive: true });
-
-      const newImagePath = `../assets/categorie/${req.file.filename}`;
-      fs.renameSync(req.file.path, path.join(categorieDir, req.file.filename));
-
+      // Supprimer l'ancienne image si elle existe
       if (categorie.image) {
-        const oldImageFullPath = path.join(__dirname, "..", categorie.image);
-        if (fs.existsSync(oldImageFullPath)) fs.unlinkSync(oldImageFullPath);
+        try {
+          await deleteFile(categorie.image);
+        } catch (deleteErr) {
+          console.warn("Impossible de supprimer l'ancienne image:", deleteErr);
+        }
       }
-      categorie.image = newImagePath;
+
+      // Upload de la nouvelle image
+      categorie.image = await uploadFile(req.file, "categorie");
     }
 
     // Mise à jour des champs
@@ -102,6 +80,7 @@ export const updateCategorie = async (
     await categorie.save();
     res.json(categorie);
   } catch (err) {
+    console.error("Erreur mise à jour catégorie:", err);
     res
       .status(500)
       .json({ message: "Erreur lors de la mise à jour", error: err });

@@ -30,10 +30,12 @@ import commandeRouter from "./Routes/commandeRoutes";
 dotenv.config();
 const app = express();
 
-app.use(cors({
-  origin: "*", // 👉 Autorise toutes les origines
-  methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
-}));
+app.use(
+  cors({
+    origin: "*", // 👉 Autorise toutes les origines
+    methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
+  }),
+);
 app.options("*", cors());
 
 // 🛠 Middleware JSON (après CORS)

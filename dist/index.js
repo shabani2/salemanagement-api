@@ -5,7 +5,6 @@ var __importDefault =
     return mod && mod.__esModule ? mod : { default: mod };
   };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.corsOptions = void 0;
 const errorHandler_1 = require("./Middlewares/errorHandler");
 const cors_1 = __importDefault(require("cors"));
 const express_1 = __importDefault(require("express"));
@@ -37,32 +36,18 @@ const commandeProduitRoutes_1 = __importDefault(
 const commandeRoutes_1 = __importDefault(require("./Routes/commandeRoutes"));
 dotenv_1.default.config();
 const app = (0, express_1.default)();
-// 🔹 Liste des domaines autorisés
-const allowedOrigins = [
-  "http://localhost:5173",
-  "http://localhost:5174",
-  "http://localhost:3000",
-  "https://www.agrecavente.online",
-  "http://localhost:8080",
-  "https://inaf-vente.netlify.app",
-];
-// 🔹 Options CORS
-exports.corsOptions = {
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-    return callback(new Error("Not allowed by CORS"));
-  },
-  methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
-};
-// 🔥 CORS doit être activé avant TOUTES les routes
-app.use((0, cors_1.default)(exports.corsOptions));
+app.use(
+  (0, cors_1.default)({
+    origin: "*", // 👉 Autorise toutes les origines
+    methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
+  }),
+);
+app.options("*", (0, cors_1.default)());
 // 🛠 Middleware JSON (après CORS)
 app.use(express_1.default.json({ limit: "20mb" }));
 app.use(express_1.default.urlencoded({ limit: "20mb", extended: true }));
 // 🔥 Vérifier que les requêtes OPTIONS passent bien
-app.options("*", (0, cors_1.default)(exports.corsOptions)); // Autoriser les préflight requests
+//app.options("*", cors(corsOptions)); // Autoriser les préflight requests
 // Connexion à MongoDB
 (0, dbConnection_1.connectDB)();
 // Routes statiques pour les images des catégories

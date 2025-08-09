@@ -5,10 +5,7 @@ import { User, UserRoleType } from "../Models/model";
 import { generateToken } from "../Utils/jwt";
 import { UserRole } from "../Utils/constant";
 import { uploadFile } from "../services/uploadService";
-
-interface MulterRequest extends Request {
-  file?: Express.Multer.File;
-}
+import { MulterFile, MulterRequest } from "../Models/multerType";
 
 export const register = async (
   req: MulterRequest,

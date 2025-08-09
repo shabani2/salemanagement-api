@@ -102,7 +102,8 @@
 
     "rootDir": "src",
 
-    "types": ["node", "jest"]
+    "types": ["node", "jest"],
+    "typeRoots": ["./node_modules/@types", "./src/Models"]
   },
   "include": ["src"],
   "exclude": ["node_modules", "**/*.test.ts"]

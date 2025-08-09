@@ -5,7 +5,7 @@ import {
   createCategorie,
   deleteCategorie,
   getAllCategories,
-  getCategorieById,
+  // getCategorieById,
   updateCategorie,
 } from "../Controllers/categorieController";
 import { upload } from "../Middlewares/upload";
@@ -18,6 +18,14 @@ router.get(
   // authorize(["SuperAdmin", "AdminRegion", "AdminPointVente"]),
   getAllCategories,
 );
+// router.get(
+//   "/:id",
+//   authenticate,
+//   authorize(["SuperAdmin", "AdminRegion", "AdminPointVente"]),
+//   upload.single("image"),
+//    getCategorieById
+//  ,
+// );
 router.post(
   "/",
   authenticate,

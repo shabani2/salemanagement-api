@@ -1,6 +1,5 @@
 import express from "express";
 import multer from "multer";
-import path from "path";
 import {
   createOrganisation,
   deleteOrganisation,
@@ -14,15 +13,14 @@ import { authorize } from "../Middlewares/authorize";
 
 const organisationRoutes = express.Router();
 
-// Configuration Multer optimisée pour GCS et développement
-const storage = multer.memoryStorage(); // Utilisez toujours memoryStorage
+// Multer en mémoire uniquement (fichier buffer disponible dans req.file.buffer)
+const storage = multer.memoryStorage();
 const upload = multer({
   storage,
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB
   },
   fileFilter: (req, file, cb) => {
-    // Autoriser seulement les images
     if (file.mimetype.startsWith("image/")) {
       cb(null, true);
     } else {
@@ -31,14 +29,10 @@ const upload = multer({
   },
 });
 
-// Middleware de gestion d'erreurs pour Multer
+// Middleware de gestion d'erreurs Multer
 const handleMulterError = (err: any, req: any, res: any, next: any) => {
-  if (err instanceof multer.MulterError) {
-    res.status(400).json({ message: err.message });
-    return;
-  } else if (err) {
-    res.status(400).json({ message: err.message });
-    return;
+  if (err instanceof multer.MulterError || err) {
+    return res.status(400).json({ message: err.message });
   }
   next();
 };
@@ -54,21 +48,20 @@ organisationRoutes.get(
   getOrganisationById,
 );
 
-// Route de création avec gestion d'erreurs Multer
+// Routes POST et PUT avec upload Multer en mémoire + gestion erreurs
 organisationRoutes.post(
   "/",
   upload.single("logo"),
-  handleMulterError, // Middleware d'erreur
+  handleMulterError,
   createOrganisation,
 );
 
-// Route de mise à jour avec gestion d'erreurs Multer
 organisationRoutes.put(
   "/:id",
   authenticate,
   authorize(["SuperAdmin"]),
   upload.single("logo"),
-  handleMulterError, // Middleware d'erreur
+  handleMulterError,
   updateOrganisation,
 );
 
