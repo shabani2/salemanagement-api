@@ -2,12 +2,22 @@ import fs from "fs";
 import path from "path";
 import { Storage } from "@google-cloud/storage";
 import { MulterFile } from "../Models/multerType";
+import { getGoogleCredentialsFile } from "../Utils/getGcpCredentials";
 
 
 
 
 
-
+// Instance unique de GCS
+let storage: Storage;
+if (process.env.NODE_ENV === "production" && process.env.GOOGLE_BUCKET_NAME) {
+  try {
+    const keyFilename = getGoogleCredentialsFile();
+    storage = new Storage({ keyFilename });
+  } catch (err) {
+    console.warn("⚠ Google Cloud Storage désactivé : credentials manquants.");
+  }
+}
 export const uploadFile = async (
   file: MulterFile,
   directory: string
@@ -44,31 +54,28 @@ export const uploadFile = async (
  * Suppression d'un fichier en local ou sur GCS
  */
 export const deleteFile = async (filePath: string): Promise<void> => {
-  // LOCAL
-  if (process.env.NODE_ENV !== "production") {
-    const fullPath = path.join(__dirname, `../../${filePath}`);
-    if (fs.existsSync(fullPath)) {
-      fs.unlinkSync(fullPath);
-    }
-    return;
-  }
-
-  // PRODUCTION
-  const bucketName = process.env.GOOGLE_BUCKET_NAME;
-  if (!bucketName) throw new Error("Bucket name non configuré");
-
-  const fileName = filePath.replace(
-    `https://storage.googleapis.com/${bucketName}/`,
-    ""
-  );
-
   try {
-    await storage.bucket(bucketName).file(fileName).delete();
+    // 1️⃣ Suppression locale (Heroku inclus)
+    const localPath = path.join(__dirname, `../../${filePath}`);
+    if (fs.existsSync(localPath)) {
+      fs.unlinkSync(localPath);
+      return;
+    }
+
+    // 2️⃣ Suppression sur Google Cloud Storage si configuré
+    if (storage && process.env.GOOGLE_BUCKET_NAME) {
+      const bucketName = process.env.GOOGLE_BUCKET_NAME;
+      const fileName = filePath.replace(
+        `https://storage.googleapis.com/${bucketName}/`,
+        ""
+      );
+
+      await storage.bucket(bucketName).file(fileName).delete();
+    }
   } catch (err) {
-    console.error("Erreur lors de la suppression du fichier sur GCS:", err);
+    console.error("Erreur lors de la suppression du fichier:", err);
   }
 };
-
 
 
 
