@@ -1,9 +1,14 @@
 import fs from "fs";
 import path from "path";
 
-export function getGoogleCredentialsFile(): string {
-  const base64Credentials = process.env.GCLOUD_CREDENTIALS_BASE64;
+let credentialsPathCache: string | null = null;
 
+export function getGoogleCredentialsFile(): string {
+  if (credentialsPathCache) {
+    return credentialsPathCache; // évite de réécrire
+  }
+
+  const base64Credentials = process.env.GCLOUD_CREDENTIALS_BASE64;
   if (!base64Credentials) {
     throw new Error("La variable GCLOUD_CREDENTIALS_BASE64 est absente.");
   }
@@ -12,14 +17,15 @@ export function getGoogleCredentialsFile(): string {
 
   const credentialsPath = path.join(
     __dirname,
-    "../tmp/gcloud-credentials.json",
+    "../tmp/gcloud-credentials.json"
   );
 
-  // Crée le dossier tmp s'il n'existe pas
   fs.mkdirSync(path.dirname(credentialsPath), { recursive: true });
 
-  // Écrit les credentials dans un fichier temporaire
-  fs.writeFileSync(credentialsPath, decoded);
+  if (!fs.existsSync(credentialsPath)) {
+    fs.writeFileSync(credentialsPath, decoded);
+  }
 
-  return credentialsPath;
+  credentialsPathCache = credentialsPath;
+  return credentialsPathCache;
 }
