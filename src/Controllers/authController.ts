@@ -99,17 +99,14 @@ export const register = async (
     const createdUser = await newUser.save();
 
     res.status(201).json(createdUser);
-  } catch (err: unknown) {
-    console.error("Erreur lors de l'inscription:", err);
-    if (err instanceof Error) {
-      res
-        .status(500)
-        .json({ message: "Erreur lors de l'inscription", error: err.message });
-    } else {
-      res.status(500).json({ message: "Une erreur inconnue est survenue" });
-    }
-  }
-};
+  } catch (uploadError) {
+    console.error("Erreur d'upload complète:", uploadError);
+    res.status(500).json({
+      message: "Échec de l'upload de l'image",
+      error: uploadError instanceof Error ? uploadError.message : uploadError
+    })
+  };
+}
 
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {

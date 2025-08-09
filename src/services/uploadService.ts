@@ -15,8 +15,9 @@ if (process.env.NODE_ENV === "production") {
 
 export const uploadFile = async (
   file: MulterFile,
-  directory: string,
+  directory: string
 ): Promise<string> => {
+  // Mode développement/local : stockage sur disque
   if (process.env.NODE_ENV !== "production") {
     const uploadDir = path.join(__dirname, `../../assets/${directory}`);
     if (!fs.existsSync(uploadDir)) {
@@ -32,7 +33,7 @@ export const uploadFile = async (
     return `assets/${directory}/${file.filename}`;
   }
 
-  // Production - upload vers GCS
+  // Mode production : upload vers Google Cloud Storage
   const bucketName = process.env.GOOGLE_BUCKET_NAME;
   if (!bucketName) throw new Error("Bucket name non configuré");
 
@@ -41,25 +42,38 @@ export const uploadFile = async (
   const blobStream = blob.createWriteStream();
 
   return new Promise((resolve, reject) => {
-    blobStream.on("error", reject);
+    blobStream.on("error", (err) => {
+      console.error("Erreur lors de l'upload vers GCS:", err);
+      reject(err);
+    });
 
     blobStream.on("finish", async () => {
       try {
         await blob.makePublic();
         resolve(`https://storage.googleapis.com/${bucket.name}/${blob.name}`);
       } catch (error) {
+        console.error("Erreur lors de la mise en public du fichier:", error);
         reject(error);
       }
     });
 
-    if (!file.buffer) {
-      reject(new Error("Le fichier n'a pas de buffer à uploader."));
+    // Cas 1 : le fichier est en mémoire (memoryStorage)
+    if (file.buffer) {
+      blobStream.end(file.buffer);
       return;
     }
 
-    blobStream.end(file.buffer);
+    // Cas 2 : le fichier est sur disque (diskStorage)
+    if (file.path && fs.existsSync(file.path)) {
+      fs.createReadStream(file.path).pipe(blobStream);
+      return;
+    }
+
+    // Cas 3 : aucun des deux → erreur
+    reject(new Error("Le fichier n'a ni buffer ni chemin local pour l'upload."));
   });
 };
+
 
 export const deleteFile = async (filePath: string): Promise<void> => {
   // Mode développement: suppression locale
