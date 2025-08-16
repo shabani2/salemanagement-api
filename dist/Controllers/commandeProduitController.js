@@ -222,17 +222,21 @@ const updateCommandeProduit = (req, res) => __awaiter(void 0, void 0, void 0, fu
     const { id } = req.params;
     const { produit, quantite, statut, mouvementStockId } = req.body;
     if (!mongoose_1.default.Types.ObjectId.isValid(id)) {
-        return res.status(400).json({ message: "ID invalide" });
+        res.status(400).json({ message: "ID invalide" });
+        return;
     }
     try {
         const updated = yield model_1.CommandeProduit.findByIdAndUpdate(id, Object.assign(Object.assign(Object.assign(Object.assign({}, (produit && { produit })), (quantite !== undefined && { quantite })), (statut && { statut })), (mouvementStockId !== undefined && { mouvementStockId })), { new: true });
         if (!updated) {
-            return res.status(404).json({ message: "CommandeProduit non trouvé" });
+            res.status(404).json({ message: "CommandeProduit non trouvé" });
+            return;
         }
         res.status(200).json(updated);
+        return;
     }
     catch (error) {
         res.status(500).json({ message: "Erreur lors de la mise à jour", error });
+        return;
     }
 });
 exports.updateCommandeProduit = updateCommandeProduit;

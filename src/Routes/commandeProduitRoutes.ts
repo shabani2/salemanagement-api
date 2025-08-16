@@ -4,33 +4,21 @@ import {
   getCommandeProduitsByUser,
   getCommandeProduitsByPointVente,
   getCommandeProduitsByRegion,
-  getCommandeById,
-  createCommande,
-  // updateCommande,
-  deleteCommande,
+  getCommandeById,            // détail d’une commande (commande + lignes)
+  updateCommandeProduit,      // MAJ d’une ligne de commande
 } from "../Controllers/commandeProduitController";
 
 const commandeProduitRouter = express.Router();
 
-commandeProduitRouter.get(
-  "/by-user/:userId",
-  authenticate,
-  getCommandeProduitsByUser,
-);
-commandeProduitRouter.get(
-  "/by-pointvente/:pointVenteId",
-  authenticate,
-  getCommandeProduitsByPointVente,
-);
-commandeProduitRouter.get(
-  "/by-region/:regionId",
-  authenticate,
-  getCommandeProduitsByRegion,
-);
+/** ⚠️ Ordre: chemins spécifiques d’abord */
+commandeProduitRouter.get("/by-user/:userId", authenticate, getCommandeProduitsByUser);
+commandeProduitRouter.get("/by-point-vente/:pointVenteId", authenticate, getCommandeProduitsByPointVente);
+commandeProduitRouter.get("/by-region/:regionId", authenticate, getCommandeProduitsByRegion);
+
+/** Détail d’une commande (commande + produits) */
 commandeProduitRouter.get("/:commandeId", authenticate, getCommandeById);
 
-commandeProduitRouter.post("/", authenticate, createCommande);
-//commandeProduitRouter.put("/:commandeId", authenticate, updateCommande);
-commandeProduitRouter.delete("/:commandeId", authenticate, deleteCommande);
+/** Mettre à jour UNE ligne de commande */
+commandeProduitRouter.put("/ligne/:id", authenticate, updateCommandeProduit);
 
 export default commandeProduitRouter;

@@ -13,16 +13,18 @@ import {
 
 const commandeRouter = express.Router();
 
-commandeRouter.get("/", authenticate, getAllCommandes);
-commandeRouter.get("/:id", authenticate, getCommandeById);
+/** ⚠️ Ordre important: on met les “by-*” AVANT "/:id" */
 commandeRouter.get("/by-user/:userId", authenticate, getCommandesByUser);
-commandeRouter.get(
-  "/by-pointvente/:pointVenteId",
-  authenticate,
-  getCommandesByPointVente,
-);
+commandeRouter.get("/by-point-vente/:pointVenteId", authenticate, getCommandesByPointVente);
 commandeRouter.get("/by-region/:regionId", authenticate, getCommandesByRegion);
 
+/** Liste paginée/triée (q, page, limit, sortBy, order) */
+commandeRouter.get("/", authenticate, getAllCommandes);
+
+/** Détail */
+commandeRouter.get("/:id", authenticate, getCommandeById);
+
+/** CRUD */
 commandeRouter.post("/", authenticate, createCommande);
 commandeRouter.put("/:id", authenticate, updateCommande);
 commandeRouter.delete("/:id", authenticate, deleteCommande);

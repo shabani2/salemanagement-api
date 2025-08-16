@@ -1,83 +1,257 @@
+// controllers/stockController.ts
 import { Request, Response } from "express";
+import mongoose, { PipelineStage, Types } from "mongoose";
 import { Stock } from "../Models/model";
-import { Types } from "mongoose";
 
-// 🔹 Obtenir tous les stocks
+/* ------------------------------ Utils parsing ------------------------------ */
+const toObjectId = (v?: any) =>
+  typeof v === "string" && Types.ObjectId.isValid(v) ? new Types.ObjectId(v) : undefined;
+
+const parseBool = (v: any, def = false) => {
+  if (v === true || v === false) return v;
+  if (typeof v === "string") {
+    const s = v.trim().toLowerCase();
+    if (["true", "1", "yes", "y"].includes(s)) return true;
+    if (["false", "0", "no", "n"].includes(s)) return false;
+  }
+  return def;
+};
+
+const parseIntSafe = (v: any, def: number) => {
+  const n = Number.parseInt(String(v), 10);
+  return Number.isFinite(n) && n > 0 ? n : def;
+};
+
+const sanitizeSort = (field?: string): string => {
+  // autoriser seulement ces champs de tri
+  const allow = new Set([
+    "createdAt",
+    "updatedAt",
+    "quantite",
+    "montant",
+    "produit.nom",
+    "pointVente.nom",
+    "region.nom",
+  ]);
+  return allow.has(field || "") ? (field as string) : "createdAt";
+};
+
+const sortOrderToInt = (order?: string) => (order === "asc" ? 1 : -1);
+
+/* ------------------------------- GET /stocks ------------------------------- */
+/**
+ * Query params pris en charge :
+ * - page (default 1), limit (default 10)
+ * - sortBy (default 'createdAt'), order ('asc'|'desc', default 'desc')
+ * - q (recherche sur produit.nom, categorie.nom, pointVente.nom, region.nom)
+ * - produit, pointVente, region (ObjectId)
+ * - depotCentral ('true'/'false')
+ * - includeTotal ('true' par défaut) : renvoie meta.total/pages/...
+ * - includeRefs ('true' par défaut) : renvoie les références peuplées via $lookup
+ */
 export const getAllStocks = async (req: Request, res: Response) => {
   try {
-    const stocks = await Stock.find()
-      .sort({ createdAt: -1 })
-      .populate({
-        path: "produit",
-        populate: { path: "categorie", model: "Categorie" },
-      })
-      .populate({
-        path: "pointVente",
-        populate: { path: "region", model: "Region" },
-      })
-      .populate("region");
+    const {
+      page: pageQ,
+      limit: limitQ,
+      sortBy: sortByQ,
+      order: orderQ,
+      q: qQ,
+      produit: produitQ,
+      pointVente: pointVenteQ,
+      region: regionQ,
+      depotCentral: depotCentralQ,
+      includeTotal: includeTotalQ,
+      includeRefs: includeRefsQ,
+    } = req.query as Record<string, string | undefined>;
 
-    res.json(stocks);
-    return;
-  } catch (err) {
-    res.status(500).json({ message: "Erreur interne", error: err });
-    return;
-  }
-};
+    const page = parseIntSafe(pageQ, 1);
+    const limit = parseIntSafe(limitQ, 10);
+    const skip = (page - 1) * limit;
 
-export const getStocksByRegion = async (req: Request, res: Response) => {
-  try {
-    const { regionId } = req.params;
+    const sortBy = sanitizeSort(sortByQ);
+    const order = sortOrderToInt(orderQ === "asc" ? "asc" : "desc");
 
-    const stocks = await Stock.find()
-      .sort({ createdAt: -1 })
+    const includeTotal = parseBool(includeTotalQ, true);
+    const includeRefs = parseBool(includeRefsQ, true);
 
-      .populate({
-        path: "produit",
-        populate: { path: "categorie", model: "Categorie" },
-      })
-      .populate({
-        path: "pointVente",
-        populate: { path: "region", model: "Region" },
-      })
-      .populate("region");
+    // Filtres de base (IDs + depotCentral)
+    const match: Record<string, any> = {};
+    const produitId = toObjectId(produitQ);
+    const pvId = toObjectId(pointVenteQ);
+    const regionId = toObjectId(regionQ);
+    const depotCentral = typeof depotCentralQ !== "undefined" ? parseBool(depotCentralQ) : undefined;
 
-    const stocksFiltrés = stocks.filter(
-      (s: any) =>
-        s.pointVente?.region?._id?.toString() === regionId ||
-        s.region?._id?.toString() === regionId,
-    );
+    if (produitId) match.produit = produitId;
+    if (pvId) match.pointVente = pvId;
+    if (regionId) match.region = regionId;
+    if (typeof depotCentral === "boolean") match.depotCentral = depotCentral;
 
-    res.json(stocksFiltrés);
-    return;
-  } catch (err) {
-    res.status(500).json({ message: "Erreur interne", error: err });
-    return;
-  }
-};
+    // Recherche texte (via $lookup), si q fourni
+    const q = typeof qQ === "string" && qQ.trim().length ? qQ.trim() : undefined;
+    const regex = q ? new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") : undefined;
 
-export const getStocksByPointVente = async (req: Request, res: Response) => {
-  try {
-    const { pointVenteId } = req.params;
+    // Pipeline d'agrégation
+    const pipeline: PipelineStage[] = [
+      { $match: match },
+      // lookup produit
+      {
+        $lookup: {
+          from: "produits",
+          localField: "produit",
+          foreignField: "_id",
+          as: "produitDoc",
+        },
+      },
+      { $unwind: { path: "$produitDoc", preserveNullAndEmptyArrays: true } },
+      // lookup categorie du produit
+      {
+        $lookup: {
+          from: "categories",
+          localField: "produitDoc.categorie",
+          foreignField: "_id",
+          as: "categorieDoc",
+        },
+      },
+      { $unwind: { path: "$categorieDoc", preserveNullAndEmptyArrays: true } },
+      // lookup point de vente
+      {
+        $lookup: {
+          from: "pointventes",
+          localField: "pointVente",
+          foreignField: "_id",
+          as: "pointVenteDoc",
+        },
+      },
+      { $unwind: { path: "$pointVenteDoc", preserveNullAndEmptyArrays: true } },
+      // lookup region directe
+      {
+        $lookup: {
+          from: "regions",
+          localField: "region",
+          foreignField: "_id",
+          as: "regionDoc",
+        },
+      },
+      { $unwind: { path: "$regionDoc", preserveNullAndEmptyArrays: true } },
+      // lookup region du pointVente (optionnel pour enrichir)
+      {
+        $lookup: {
+          from: "regions",
+          localField: "pointVenteDoc.region",
+          foreignField: "_id",
+          as: "pvRegionDoc",
+        },
+      },
+      { $unwind: { path: "$pvRegionDoc", preserveNullAndEmptyArrays: true } },
+    ];
 
-    if (!pointVenteId) {
-      res.status(400).json({ message: "ID du point de vente requis" });
-      return;
+    // Si recherche plein-texte sur référentiels
+    if (regex) {
+      pipeline.push({
+        $match: {
+          $or: [
+            { "produitDoc.nom": regex },
+            { "categorieDoc.nom": regex },
+            { "pointVenteDoc.nom": regex },
+            { "regionDoc.nom": regex },
+            { "pvRegionDoc.nom": regex },
+          ],
+        },
+      });
     }
 
-    const stocks = await Stock.find({ pointVente: pointVenteId })
-      .sort({ createdAt: -1 })
-      .populate({
-        path: "produit",
-        populate: { path: "categorie", model: "Categorie" },
-      })
-      .populate({
-        path: "pointVente",
-        populate: { path: "region", model: "Region" },
-      })
-      .populate("region");
+    // Projection : si includeRefs=false, renvoyer le document brut
+    if (includeRefs) {
+      pipeline.push({
+        $project: {
+          _id: 1,
+          quantite: 1,
+          montant: 1,
+          depotCentral: 1,
+          createdAt: 1,
+          updatedAt: 1,
+          produit: {
+            _id: "$produitDoc._id",
+            nom: "$produitDoc.nom",
+            prix: "$produitDoc.prix",
+            tva: "$produitDoc.tva",
+            prixVente: "$produitDoc.prixVente",
+            netTopay: "$produitDoc.netTopay",
+            seuil: "$produitDoc.seuil",
+            categorie: {
+              _id: "$categorieDoc._id",
+              nom: "$categorieDoc.nom",
+              image: "$categorieDoc.image",
+            },
+          },
+          pointVente: {
+            _id: "$pointVenteDoc._id",
+            nom: "$pointVenteDoc.nom",
+            adresse: "$pointVenteDoc.adresse",
+            region: {
+              _id: "$pvRegionDoc._id",
+              nom: "$pvRegionDoc.nom",
+              ville: "$pvRegionDoc.ville",
+            },
+          },
+          region: {
+            _id: "$regionDoc._id",
+            nom: "$regionDoc.nom",
+            ville: "$regionDoc.ville",
+          },
+        },
+      });
+    } else {
+      // Données brutes (sans refs)
+      pipeline.push({
+        $project: {
+          _id: 1,
+          quantite: 1,
+          montant: 1,
+          produit: 1,
+          pointVente: 1,
+          region: 1,
+          depotCentral: 1,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      });
+    }
 
-    res.json(stocks);
+    // Tri
+    pipeline.push({ $sort: { [sortBy]: order, _id: -1 } });
+
+    // Facet pagination + total
+    pipeline.push({
+      $facet: {
+        data: [{ $skip: skip }, { $limit: limit }],
+        ...(includeTotal ? { metadata: [{ $count: "total" }] } : {}),
+      },
+    });
+
+    const result = await Stock.aggregate(pipeline);
+    const doc = result?.[0] || { data: [], metadata: [] };
+    const data = doc.data || [];
+
+    let total = 0;
+    if (includeTotal) {
+      total = doc.metadata?.[0]?.total || 0;
+    }
+
+    res.json({
+      data,
+      meta: {
+        total,
+        page,
+        pages: includeTotal ? Math.ceil(total / limit) : undefined,
+        limit,
+        hasNext: includeTotal ? page * limit < total : undefined,
+        hasPrev: includeTotal ? page > 1 : undefined,
+        sortBy,
+        order: order === 1 ? "asc" : "desc",
+      },
+    });
     return;
   } catch (err) {
     res.status(500).json({ message: "Erreur interne", error: err });
@@ -85,9 +259,15 @@ export const getStocksByPointVente = async (req: Request, res: Response) => {
   }
 };
 
+/* ------------------------------- GET /stocks/:id --------------------------- */
 export const getStockById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+
+    if (!Types.ObjectId.isValid(id)) {
+      res.status(400).json({ message: "ID invalide" });
+      return;
+    }
 
     const stock = await Stock.findById(id)
       .populate({
@@ -113,25 +293,37 @@ export const getStockById = async (req: Request, res: Response) => {
   }
 };
 
-// 🔹 Créer un stock
+/* -------------------------------- POST /stocks ----------------------------- */
 export const createStock = async (req: Request, res: Response) => {
   try {
-    const { produit, quantite, montant, pointVente, depotCentral } = req.body;
+    const { produit, quantite, montant, pointVente, region, depotCentral } = req.body;
 
-    if (!pointVente && depotCentral !== true) {
+    const produitId = toObjectId(produit);
+    const pvId = toObjectId(pointVente);
+    const regionId = toObjectId(region);
+    const depot = !!depotCentral;
+
+    if (!produitId) {
+      res.status(400).json({ message: "Produit invalide" });
+      return;
+    }
+
+    // Au moins une localisation : PV, Région, ou Dépôt central (true)
+    if (!pvId && !regionId && depot !== true) {
       res.status(400).json({
         message:
-          "Un stock doit être associé à un point de vente ou être marqué comme provenant du dépôt central.",
+          "Un stock doit être associé à un point de vente, une région, ou être marqué comme 'dépôt central'.",
       });
       return;
     }
 
     const stock = new Stock({
-      produit,
+      produit: produitId,
       quantite,
       montant,
-      pointVente: pointVente || undefined,
-      depotCentral: depotCentral || false,
+      pointVente: pvId,
+      region: regionId,
+      depotCentral: depot,
     });
 
     await stock.save();
@@ -141,16 +333,31 @@ export const createStock = async (req: Request, res: Response) => {
   }
 };
 
-// 🔹 Mettre à jour un stock
+/* ------------------------------- PUT /stocks/:id --------------------------- */
 export const updateStock = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { produit, quantite, montant, pointVente, depotCentral } = req.body;
+    if (!Types.ObjectId.isValid(id)) {
+      res.status(400).json({ message: "ID invalide" });
+      return;
+    }
 
-    if (!pointVente && depotCentral !== true) {
+    const { produit, quantite, montant, pointVente, region, depotCentral } = req.body;
+
+    const produitId = toObjectId(produit);
+    const pvId = toObjectId(pointVente);
+    const regionId = toObjectId(region);
+    const depot = !!depotCentral;
+
+    if (!produitId) {
+      res.status(400).json({ message: "Produit invalide" });
+      return;
+    }
+
+    if (!pvId && !regionId && depot !== true) {
       res.status(400).json({
         message:
-          "Un stock doit être associé à un point de vente ou être marqué comme provenant du dépôt central.",
+          "Un stock doit être associé à un point de vente, une région, ou être marqué comme 'dépôt central'.",
       });
       return;
     }
@@ -158,13 +365,14 @@ export const updateStock = async (req: Request, res: Response) => {
     const updated = await Stock.findByIdAndUpdate(
       id,
       {
-        produit,
+        produit: produitId,
         quantite,
         montant,
-        pointVente,
-        depotCentral,
+        pointVente: pvId,
+        region: regionId,
+        depotCentral: depot,
       },
-      { new: true },
+      { new: true, runValidators: true }
     );
 
     if (!updated) {
@@ -180,10 +388,14 @@ export const updateStock = async (req: Request, res: Response) => {
   }
 };
 
-// 🔹 Supprimer un stock
+/* ------------------------------ DELETE /stocks/:id ------------------------- */
 export const deleteStock = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    if (!Types.ObjectId.isValid(id)) {
+      res.status(400).json({ message: "ID invalide" });
+      return;
+    }
     await Stock.findByIdAndDelete(id);
     res.json({ message: "Stock supprimé avec succès" });
   } catch (err) {
@@ -191,40 +403,35 @@ export const deleteStock = async (req: Request, res: Response) => {
   }
 };
 
+/* -------------------------- Vérification de stock -------------------------- */
+/**
+ * checkStock — logique existante conservée (PV / dépôt central).
+ * Si tu souhaites supporter la "région" ici, on peut ajouter un paramètre `regionId`.
+ */
 export const checkStock = async (
   type: string,
   produitId: string,
-  pointVenteId?: string,
+  pointVenteId?: string
 ): Promise<number> => {
   if (!Types.ObjectId.isValid(produitId)) {
-    console.warn("checkStock: produitId invalide", produitId);
     return 0;
   }
-
   if (pointVenteId && !Types.ObjectId.isValid(pointVenteId)) {
-    console.warn("checkStock: pointVenteId invalide", pointVenteId);
     return 0;
   }
 
-  let query: any = { produit: produitId };
+  const query: any = { produit: new Types.ObjectId(produitId) };
 
   if (type === "Livraison") {
     query.depotCentral = true;
   } else if (["Vente", "Commande", "Sortie"].includes(type)) {
-    if (!pointVenteId) {
-      console.warn("checkStock: pointVenteId manquant pour type", type);
-      return 0;
-    }
-    query.pointVente = pointVenteId;
+    if (!pointVenteId) return 0;
+    query.pointVente = new Types.ObjectId(pointVenteId);
   } else {
-    console.warn("checkStock: type invalide", type);
     return 0;
   }
 
-  console.log("checkStock query", query);
-  const stock = await Stock.findOne(query);
-  console.log("stock result =", stock ?? "NO STOCK FOUND");
-
+  const stock = await Stock.findOne(query).lean();
   return stock?.quantite || 0;
 };
 
@@ -238,17 +445,14 @@ export const checkStockHandler = async (req: Request, res: Response) => {
 
   try {
     const quantiteDisponible = await checkStock(type, produitId, pointVenteId);
-    console.log("quantiteDisponible:", quantiteDisponible);
-
     res.json({
       success: true,
       quantiteDisponible,
-      suffisant: quantiteDisponible >= quantite,
+      suffisant: quantiteDisponible >= Number(quantite),
     });
     return;
   } catch (error) {
-    console.error("Erreur API checkStock:", error);
-    res.status(500).json({ success: false, message: "Erreur serveur" });
+    res.status(500).json({ success: false, message: "Erreur serveur", error });
     return;
   }
 };

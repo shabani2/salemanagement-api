@@ -1,78 +1,96 @@
 // controllers/commandeController.ts
-
 import { Request, Response } from "express";
 import mongoose from "mongoose";
-import { Commande, CommandeProduit, MouvementStock } from "../Models/model";
+import { Commande, CommandeProduit, MouvementStock, PointVente } from "../Models/model";
 
-const getPaginationOptions = (req: Request) => {
-  const page = parseInt(req.query.page as string) || 1;
-  const limit = parseInt(req.query.limit as string) || 10;
+/* --------------------------- Utils pagination/sort -------------------------- */
+const getListOptions = (req: Request) => {
+  const page = Math.max(parseInt(String(req.query.page ?? "1"), 10) || 1, 1);
+  const limit = Math.min(
+    Math.max(parseInt(String(req.query.limit ?? "10"), 10) || 10, 1),
+    100,
+  );
   const skip = (page - 1) * limit;
-  return { page, limit, skip };
+  const sortBy = String(req.query.sortBy || "createdAt");
+  const order = String(req.query.order || "desc").toLowerCase() === "asc" ? 1 : -1;
+  const sort = { [sortBy]: order as 1 | -1 };
+  return { page, limit, skip, sort };
 };
 
 const commonPopulate = [
   { path: "user", select: "-password" },
   { path: "region" },
-  {
-    path: "pointVente",
-    populate: { path: "region", model: "Region" },
-  },
+  { path: "pointVente", populate: { path: "region", model: "Region" } },
 ];
 
+/* ------------------------------ Format commande ---------------------------- */
 const formatCommande = async (commande: any) => {
   await commande.populate({
     path: "produits",
-    populate: {
-      path: "produit",
-      model: "Produit",
-    },
+    populate: { path: "produit", model: "Produit" },
   });
 
+  // Montant total = somme(prix * quantité) sur lignes
   let montant = 0;
-  let nombreCommandeProduit = 0;
-  let livrés = 0;
+
+  // Taux de livraison — on calcule 2 métriques utiles
+  let lignesLivrees = 0;
+  let quantiteTotale = 0;
+  let quantiteLivree = 0;
 
   commande.produits.forEach((cp: any) => {
-    const prix = cp.produit?.prix ?? 0;
-    const quantite = cp.quantite ?? 0;
-    montant += prix * quantite;
+    const prix = cp?.produit?.prix ?? 0;
+    const qte = cp?.quantite ?? 0;
+    montant += prix * qte;
 
-    if (cp.statut === "livré") livrés += quantite;
+    quantiteTotale += qte;
+    if (cp.statut === "livré") {
+      lignesLivrees += 1;
+      quantiteLivree += qte;
+    }
   });
-  nombreCommandeProduit += commande.produits.length;
-  const tauxLivraison =
-    nombreCommandeProduit > 0
-      ? Math.round((livrés / nombreCommandeProduit) * 100)
-      : 0;
+
+  const totalLignes = commande.produits.length || 1;
+  const tauxLivraisonLignes = Math.round((lignesLivrees / totalLignes) * 100);
+  const tauxLivraisonQuantite =
+    quantiteTotale > 0 ? Math.round((quantiteLivree / quantiteTotale) * 100) : 0;
 
   return {
     ...commande.toObject(),
     montant,
-    nombreCommandeProduit,
-    tauxLivraison,
+    lignes: totalLignes,
+    lignesLivrees,
+    tauxLivraisonLignes,
+    tauxLivraisonQuantite,
   };
 };
 
+/* --------------------------------- GET all --------------------------------- */
 export const getAllCommandes = async (req: Request, res: Response) => {
   try {
-    const { skip, limit } = getPaginationOptions(req);
+    const { skip, limit, sort, page } = getListOptions(req);
 
-    const commandes = await Commande.find()
-      .skip(skip)
-      .limit(limit)
-      .populate("user", "-password")
-      .populate("region")
-      .populate({
-        path: "pointVente",
-        populate: { path: "region", model: "Region" },
-      });
+    // petits filtres optionnels: q (numero), user, region, pointVente
+    const q = String(req.query.q || "").trim();
+    const where: Record<string, any> = {};
+    if (q) where.numero = { $regex: q, $options: "i" };
+    if (req.query.user && mongoose.Types.ObjectId.isValid(String(req.query.user))) {
+      where.user = req.query.user;
+    }
+    if (req.query.region && mongoose.Types.ObjectId.isValid(String(req.query.region))) {
+      where.region = req.query.region;
+    }
+    if (req.query.pointVente && mongoose.Types.ObjectId.isValid(String(req.query.pointVente))) {
+      where.pointVente = req.query.pointVente;
+    }
 
-    const total = await Commande.countDocuments();
+    const [total, rows] = await Promise.all([
+      Commande.countDocuments(where),
+      Commande.find(where).sort(sort).skip(skip).limit(limit).populate(commonPopulate),
+    ]);
 
-    const formatted = await Promise.all(commandes.map(formatCommande));
-
-    res.status(200).json({ total, commandes: formatted });
+    const commandes = await Promise.all(rows.map(formatCommande));
+    res.status(200).json({ total, page, limit, commandes });
   } catch (error) {
     res.status(400).json({
       message: "Erreur lors de la récupération des commandes.",
@@ -81,26 +99,23 @@ export const getAllCommandes = async (req: Request, res: Response) => {
   }
 };
 
+/* ------------------------------- GET by user ------------------------------- */
 export const getCommandesByUser = async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
-    const { skip, limit } = getPaginationOptions(req);
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      res.status(400).json({ message: "userId invalide" });
+      return;
+    }
 
-    const commandes = await Commande.find({ user: userId })
-      .skip(skip)
-      .limit(limit)
-      .populate("user", "-password")
-      .populate("region")
-      .populate({
-        path: "pointVente",
-        populate: { path: "region", model: "Region" },
-      });
+    const { skip, limit, sort, page } = getListOptions(req);
+    const [total, rows] = await Promise.all([
+      Commande.countDocuments({ user: userId }),
+      Commande.find({ user: userId }).sort(sort).skip(skip).limit(limit).populate(commonPopulate),
+    ]);
 
-    const total = await Commande.countDocuments({ user: userId });
-
-    const formatted = await Promise.all(commandes.map(formatCommande));
-
-    res.status(200).json({ total, commandes: formatted });
+    const commandes = await Promise.all(rows.map(formatCommande));
+    res.status(200).json({ total, page, limit, commandes });
   } catch (error) {
     res.status(400).json({
       message: "Erreur lors de la récupération des commandes utilisateur.",
@@ -109,63 +124,60 @@ export const getCommandesByUser = async (req: Request, res: Response) => {
   }
 };
 
+/* --------------------------- GET by point de vente ------------------------- */
 export const getCommandesByPointVente = async (req: Request, res: Response) => {
   try {
     const { pointVenteId } = req.params;
-    const { skip, limit } = getPaginationOptions(req);
+    if (!mongoose.Types.ObjectId.isValid(pointVenteId)) {
+      res.status(400).json({ message: "pointVenteId invalide" });
+      return;
+    }
 
-    const commandes = await Commande.find({ pointVente: pointVenteId })
-      .skip(skip)
-      .limit(limit)
-      .populate("user", "-password")
-      .populate("region")
-      .populate({
-        path: "pointVente",
-        populate: { path: "region", model: "Region" },
-      });
+    const { skip, limit, sort, page } = getListOptions(req);
+    const [total, rows] = await Promise.all([
+      Commande.countDocuments({ pointVente: pointVenteId }),
+      Commande.find({ pointVente: pointVenteId })
+        .sort(sort)
+        .skip(skip)
+        .limit(limit)
+        .populate(commonPopulate),
+    ]);
 
-    const total = await Commande.countDocuments({ pointVente: pointVenteId });
-
-    const formatted = await Promise.all(commandes.map(formatCommande));
-
-    res.status(200).json({ total, commandes: formatted });
+    const commandes = await Promise.all(rows.map(formatCommande));
+    res.status(200).json({ total, page, limit, commandes });
   } catch (error) {
     res.status(400).json({
-      message:
-        "Erreur lors de la récupération des commandes par point de vente.",
+      message: "Erreur lors de la récupération des commandes par point de vente.",
       error: (error as Error).message,
     });
   }
 };
 
+/* -------------------------------- GET by region ---------------------------- */
 export const getCommandesByRegion = async (req: Request, res: Response) => {
   try {
     const { regionId } = req.params;
-    const { skip, limit } = getPaginationOptions(req);
+    if (!mongoose.Types.ObjectId.isValid(regionId)) {
+      res.status(400).json({ message: "regionId invalide" });
+      return;
+    }
 
-    // 1. Récupérer toutes les commandes liées à cette région ou ayant un pointVente
-    const commandes = await Commande.find({
-      $or: [{ region: regionId }, { pointVente: { $ne: null } }],
-    })
-      .skip(skip)
-      .limit(limit)
-      .populate(commonPopulate);
+    const { skip, limit, sort, page } = getListOptions(req);
 
-    // 2. Filtrer en JS selon la condition réelle de correspondance
-    const filtered = commandes.filter(
-      (cmd) =>
-        cmd.region?._id?.toString() === regionId ||
-        (cmd.pointVente &&
-          typeof cmd.pointVente === "object" &&
-          "region" in cmd.pointVente &&
-          (cmd.pointVente as any).region &&
-          typeof (cmd.pointVente as any).region === "object" &&
-          (cmd.pointVente as any).region._id?.toString() === regionId),
-    );
+    // Récupère les PV de la région pour une requête directe (au lieu de filtrer en JS)
+    const pvIds = await PointVente.find({ region: regionId }).distinct("_id");
 
-    const formatted = await Promise.all(filtered.map(formatCommande));
+    const where = {
+      $or: [{ region: new mongoose.Types.ObjectId(regionId) }, { pointVente: { $in: pvIds } }],
+    };
 
-    res.status(200).json({ total: filtered.length, commandes: formatted });
+    const [total, rows] = await Promise.all([
+      Commande.countDocuments(where),
+      Commande.find(where).sort(sort).skip(skip).limit(limit).populate(commonPopulate),
+    ]);
+
+    const commandes = await Promise.all(rows.map(formatCommande));
+    res.status(200).json({ total, page, limit, commandes });
   } catch (error) {
     res.status(400).json({
       message: "Erreur lors de la récupération des commandes par région.",
@@ -174,25 +186,22 @@ export const getCommandesByRegion = async (req: Request, res: Response) => {
   }
 };
 
+/* -------------------------------- GET by id -------------------------------- */
 export const getCommandeById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      res.status(400).json({ message: "id invalide" });
+      return;
+    }
 
-    const commande = await Commande.findById(id)
-      .populate("user", "-password")
-      .populate("region")
-      .populate({
-        path: "pointVente",
-        populate: { path: "region", model: "Region" },
-      });
-
+    const commande = await Commande.findById(id).populate(commonPopulate);
     if (!commande) {
       res.status(404).json({ message: "Commande non trouvée." });
       return;
     }
 
     const formatted = await formatCommande(commande);
-
     res.status(200).json(formatted);
   } catch (error) {
     res.status(400).json({
@@ -202,76 +211,57 @@ export const getCommandeById = async (req: Request, res: Response) => {
   }
 };
 
-/**
- * POST /commandes
- */
-
+/* ----------------------------------- POST ---------------------------------- */
 export const createCommande = async (req: Request, res: Response) => {
   try {
     const { user, region, pointVente, depotCentral, produits } = req.body;
 
-    if (!user || !produits || produits.length === 0) {
-      res
-        .status(400)
-        .json({ message: "L'utilisateur et les produits sont requis." });
+    if (!user || !Array.isArray(produits) || produits.length === 0) {
+      res.status(400).json({ message: "L'utilisateur et les produits sont requis." });
       return;
     }
 
     const hasPointVente = !!pointVente;
     const hasRegion = !!region;
     const hasDepotCentral = depotCentral === true;
-
     if (!hasPointVente && !hasRegion && !hasDepotCentral) {
-      res
-        .status(400)
-        .json({ message: "La commande doit être liée à une localisation." });
+      res.status(400).json({ message: "La commande doit être liée à une localisation." });
       return;
     }
 
-    // 1. Créer la commande (vide pour le moment)
     const numero = `CMD-${Date.now()}`;
     const commande = new Commande({
       numero,
       user,
-      region,
-      pointVente,
-      depotCentral,
-      produits: [], // vide au départ
+      region: region || undefined,
+      pointVente: pointVente || undefined,
+      depotCentral: !!depotCentral,
+      produits: [],
       statut: "attente",
     });
     await commande.save();
 
-    // 2. Créer les CommandeProduits avec l'ID de la commande
-    const createdCommandeProduits = await Promise.all(
-      produits.map(async (prod: any) => {
-        const created = new CommandeProduit({
-          commandeId: commande._id, // liaison ici
-          produit: prod.produit,
-          quantite: prod.quantite,
-          uniteMesure: prod.uniteMesure,
+    // Crée les lignes et relie-les à la commande
+    const createdLignes = await Promise.all(
+      produits.map(async (p: any) => {
+        const cp = new CommandeProduit({
+          commandeId: commande._id,
+          produit: p.produit,
+          quantite: p.quantite,
+          uniteMesure: p.uniteMesure,
           statut: "attente",
         });
-        await created.save();
-        return created._id;
+        await cp.save();
+        return cp._id;
       }),
     );
 
-    // 3. Mise à jour de la commande avec les produits créés
-    commande.produits = createdCommandeProduits;
+    commande.produits = createdLignes;
     await commande.save();
 
-    // 4. Renvoyer la commande peuplée
     const populated = await Commande.findById(commande._id)
-      .populate("user", "-password")
-      .populate("region")
-      .populate({
-        path: "pointVente",
-        populate: { path: "region", model: "Region" },
-      })
-      .populate({
-        path: "produits",
-        populate: { path: "produit" },
-      });
+      .populate(commonPopulate)
+      .populate({ path: "produits", populate: { path: "produit" } });
 
     res.status(201).json(populated);
   } catch (error) {
@@ -282,122 +272,89 @@ export const createCommande = async (req: Request, res: Response) => {
   }
 };
 
-/**
- * PUT /commandes/:id
- */
-
+/* ----------------------------------- PUT ----------------------------------- */
 export const updateCommande = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      res.status(400).json({ message: "id invalide" });
+      return;
+    }
+
     const { produits: produitsUpdates, ...updateData } = req.body;
 
-    // 1. Mise à jour des champs de la commande (hors produits)
-    const commande = await Commande.findByIdAndUpdate(id, updateData, {
-      new: true,
-    });
+    // 1) Mise à jour de la commande (hors produits)
+    const commande = await Commande.findByIdAndUpdate(id, updateData, { new: true });
     if (!commande) {
       res.status(404).json({ message: "Commande non trouvée." });
       return;
     }
 
-    // 2. Mise à jour des produits, si fournis
+    // 2) Mise à jour des lignes si fournies
     if (Array.isArray(produitsUpdates) && produitsUpdates.length > 0) {
-      // On boucle sur les produits mis à jour
       for (const prodUpdate of produitsUpdates) {
-        const {
-          _id: produitId,
-          statut,
-          quantite,
-          mouvementStockId,
-          ...rest
-        } = prodUpdate;
+        const { _id: ligneId, statut, quantite, montant, ...rest } = prodUpdate;
+        if (!ligneId || !mongoose.Types.ObjectId.isValid(String(ligneId))) continue;
 
-        if (!produitId) {
-          // On ignore ou on peut gérer erreur
-          continue;
-        }
+        const ligne = await CommandeProduit.findById(ligneId);
+        if (!ligne) continue;
 
-        // Récupération du produit commande à mettre à jour
-        const produitCommande = await CommandeProduit.findById(produitId);
-        if (!produitCommande) {
-          // Ignore ou collecter erreurs
-          continue;
-        }
+        // champs libres
+        Object.assign(ligne, rest);
+        if (typeof quantite === "number") ligne.quantite = quantite;
 
-        // Mise à jour des propriétés générales sauf statut (car trigger)
-        for (const key in rest) {
-          // @ts-ignore
-          produitCommande[key] = rest[key];
-        }
-
-        // Gestion spéciale du statut
-        if (statut && statut !== produitCommande.statut) {
-          // Si passage au statut livré, on déclenche la création de mouvement stock
+        // gestion du statut
+        if (statut && statut !== ligne.statut) {
           if (statut === "livré") {
-            // Si déjà livré, on skip
-            if (produitCommande.statut === "livré") {
-              // rien à faire
-            } else {
-              // Créer le mouvement stock lié
+            if (ligne.statut !== "livré") {
+              // Création du mouvement stock lié
               const mouvementData: any = {
-                produit: produitCommande.produit,
-                quantite: quantite ?? produitCommande.quantite,
-                montant: prodUpdate.montant ?? 0, // idéalement passé dans prodUpdate
+                produit: ligne.produit,
+                quantite: typeof quantite === "number" ? quantite : ligne.quantite,
+                montant: typeof montant === "number" ? montant : 0,
                 type: "Livraison",
                 statut: true,
-                user: updateData.user, // À adapter selon contexte
+                user: updateData.user || commande.user, // fallback user de la commande
                 commandeId: commande._id,
-                depotCentral: updateData.depotCentral || false,
+                depotCentral: !!(updateData.depotCentral ?? commande.depotCentral),
               };
-              if (updateData.pointVente) {
-                mouvementData.pointVente = updateData.pointVente;
+              if (updateData.pointVente ?? commande.pointVente) {
+                mouvementData.pointVente = updateData.pointVente ?? commande.pointVente;
               }
-              if (updateData.region) {
-                mouvementData.region = updateData.region;
+              if (updateData.region ?? commande.region) {
+                mouvementData.region = updateData.region ?? commande.region;
               }
 
               const mouvement = new MouvementStock(mouvementData);
               await mouvement.save();
 
-              produitCommande.mouvementStockId = mouvement._id;
-              produitCommande.statut = "livré";
+              ligne.mouvementStockId = mouvement._id;
+              ligne.statut = "livré";
             }
           } else {
-            // Si changement de statut autre que livré, on applique direct
-            produitCommande.statut = statut;
+            // autres transitions de statut
+            ligne.statut = statut;
           }
         }
 
-        await produitCommande.save();
+        await ligne.save();
       }
     }
 
-    // 3. Recharger tous les produits pour vérifier si tous sont livrés
-    const produitsCommande = await CommandeProduit.find({
-      commande: commande._id,
-    });
-    const tousLivrés = produitsCommande.every((p) => p.statut === "livré");
-
-    if (tousLivrés && commande.statut !== "livrée") {
+    // 3) Rechargement des lignes pour calcul statut global
+    const lignesCmd = await CommandeProduit.find({ commandeId: commande._id });
+    const tousLivres = lignesCmd.length > 0 && lignesCmd.every((l) => l.statut === "livré");
+    if (tousLivres && commande.statut !== "livrée") {
       commande.statut = "livrée";
       await commande.save();
     }
 
-    // 4. Retourner la commande peuplée
+    // 4) Retourner la commande peuplée
     const populated = await Commande.findById(commande._id)
-      .populate("user", "-password")
-      .populate("region")
-      .populate({
-        path: "pointVente",
-        populate: { path: "region", model: "Region" },
-      })
-      .populate({
-        path: "produits",
-        populate: { path: "produit" },
-      });
+      .populate(commonPopulate)
+      .populate({ path: "produits", populate: { path: "produit" } });
 
     res.status(200).json(populated);
-    return;
   } catch (error) {
     res.status(400).json({
       message: "Erreur lors de la mise à jour de la commande.",
@@ -406,15 +363,23 @@ export const updateCommande = async (req: Request, res: Response) => {
   }
 };
 
-/**
- * DELETE /commandes/:id
- */
+/* ---------------------------------- DELETE --------------------------------- */
 export const deleteCommande = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      res.status(400).json({ message: "id invalide" });
+      return;
+    }
 
     const deleted = await Commande.findByIdAndDelete(id);
-    if (!deleted) res.status(404).json({ message: "Commande non trouvée." });
+    if (!deleted) {
+      res.status(404).json({ message: "Commande non trouvée." });
+      return;
+    }
+
+    // on supprime aussi les lignes associées
+    await CommandeProduit.deleteMany({ commandeId: id });
 
     res.status(200).json({ message: "Commande supprimée avec succès." });
   } catch (error) {
@@ -422,6 +387,5 @@ export const deleteCommande = async (req: Request, res: Response) => {
       message: "Erreur lors de la suppression.",
       error: (error as Error).message,
     });
-    return;
   }
 };

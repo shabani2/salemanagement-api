@@ -90,10 +90,15 @@ app.use("/categories", categorieRoutes);
 app.use("/produits", produitRoutes);
 
 app.use("/organisations", organisationRoutes);
-app.use("/region", regionRoutes);
+app.use("/regions", regionRoutes);
+// Canonique (recommandé)
+app.use("/pointventes", pointVenteRoutes);
+
+// Compat anciennes versions
 app.use("/point-ventes", pointVenteRoutes);
-app.use("/mouvementStock", mouvementStockRoute);
-app.use("/stock", stockRouter);
+app.use("/pointvente", pointVenteRoutes);
+app.use("/mouvements", mouvementStockRoute);
+app.use("/stocks", stockRouter);
 app.use("/generatePdf", pdfRouter);
 
 // Finance routes
@@ -103,8 +108,9 @@ app.use("/finance/discounts", discountRouter);
 app.use("/finance/settings", financialSettingsRouter);
 
 //routes pour les commandes
-app.use("/commandes", commandeRouter);
 app.use("/commande-produits", commandeProduitRouter);
+app.use("/commandes", commandeRouter);
+
 // routes pour les exports
 app.use("/export", exportRouter);
 

@@ -53,10 +53,14 @@ app.use("/user", userRoutes_1.default);
 app.use("/categories", categorieRoutes_1.default);
 app.use("/produits", produitRoutes_1.default);
 app.use("/organisations", organisationRoutes_1.default);
-app.use("/region", regionRoutes_1.default);
+app.use("/regions", regionRoutes_1.default);
+// Canonique (recommandé)
+app.use("/pointventes", pointVenteRoutes_1.default);
+// Compat anciennes versions
 app.use("/point-ventes", pointVenteRoutes_1.default);
-app.use("/mouvementStock", mouvementStockRoute_1.default);
-app.use("/stock", stockRoutes_1.default);
+app.use("/pointvente", pointVenteRoutes_1.default);
+app.use("/mouvements", mouvementStockRoute_1.default);
+app.use("/stocks", stockRoutes_1.default);
 app.use("/generatePdf", pdfRouter_1.default);
 // Finance routes
 app.use("/finance/currencies", FinanceRoutes_1.currencyRouter);
@@ -64,8 +68,8 @@ app.use("/finance/exchange-rates", FinanceRoutes_1.exchangeRateRouter);
 app.use("/finance/discounts", FinanceRoutes_1.discountRouter);
 app.use("/finance/settings", FinanceRoutes_1.financialSettingsRouter);
 //routes pour les commandes
-app.use("/commandes", commandeRoutes_1.default);
 app.use("/commande-produits", commandeProduitRoutes_1.default);
+app.use("/commandes", commandeRoutes_1.default);
 // routes pour les exports
 app.use("/export", exportRouter_1.default);
 app.get("/", (_req, res) => {

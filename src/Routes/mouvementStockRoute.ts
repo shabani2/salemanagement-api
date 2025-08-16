@@ -1,53 +1,16 @@
-import express from "express";
-import {
-  getAllMouvementsStock,
-  getMouvementStockById,
-  createMouvementStock,
-  updateMouvementStock,
-  deleteMouvementStock,
-  getMouvementsStockByPointVente,
-  getMouvementStockByRegion,
-  getMouvementsStockByPointVenteId,
-  getMouvementsStockByUserId,
-  getMouvementsStockAggregatedByUserId,
-  getMouvementsStockAggregatedByPointVente,
-} from "../Controllers/mouvementStockController";
-import { authenticate } from "../Middlewares/auth";
-import { validateState } from "../Controllers/mouvementStockController";
 
-const mvtStockrouter = express.Router();
+import express from 'express';
+import { authenticate } from '../Middlewares/auth';
+import { createMouvementStock, deleteMouvementStock, getMouvementById, listMouvementsStock, updateMouvementStock, validateMouvementStock } from '../Controllers/mouvementStockController';
 
-mvtStockrouter.get("/", authenticate, getAllMouvementsStock);
-mvtStockrouter.get("/:id", authenticate, getMouvementStockById);
-mvtStockrouter.get(
-  "/by-point-vente/:pointVenteId",
-  authenticate,
-  getMouvementsStockByPointVente,
-);
-mvtStockrouter.get(
-  "/by-point-vente/page/:pointVenteId",
-  authenticate,
-  getMouvementsStockByPointVenteId,
-);
-mvtStockrouter.get(
-  "/by-point-vente/aggregate/:pointVenteId",
-  authenticate,
-  getMouvementsStockAggregatedByPointVente,
-);
-mvtStockrouter.get("/byUser/:userId", authenticate, getMouvementsStockByUserId);
-mvtStockrouter.get(
-  "/byUser/aggregate/:userId",
-  authenticate,
-  getMouvementsStockAggregatedByUserId,
-);
-mvtStockrouter.get(
-  "/region/:regionId",
-  authenticate,
-  getMouvementStockByRegion,
-);
-mvtStockrouter.post("/", authenticate, createMouvementStock);
-mvtStockrouter.put("/:id", authenticate, updateMouvementStock);
-mvtStockrouter.delete("/:id", authenticate, deleteMouvementStock);
-mvtStockrouter.put("/validate/:id", authenticate, validateState);
 
-export default mvtStockrouter;
+const mouvementStockRoute = express.Router();
+
+mouvementStockRoute.get('/', authenticate, listMouvementsStock);
+mouvementStockRoute.get('/:id', authenticate, getMouvementById);
+mouvementStockRoute.post('/', authenticate, createMouvementStock);
+mouvementStockRoute.put('/:id', authenticate, updateMouvementStock);
+mouvementStockRoute.delete('/:id', authenticate, deleteMouvementStock);
+mouvementStockRoute.patch('/:id/validate', authenticate, validateMouvementStock);
+
+export default mouvementStockRoute;

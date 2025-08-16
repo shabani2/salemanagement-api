@@ -1,3 +1,4 @@
+// routes/pointVenteRoutes.ts
 import express from "express";
 import { authenticate } from "../Middlewares/auth";
 import { authorize } from "../Middlewares/authorize";
@@ -8,35 +9,71 @@ import {
   getPointVenteById,
   getPointVentesByRegion,
   updatePointVente,
+  searchPointVentes, // 👈 importe la recherche
 } from "../Controllers/pointVenteController";
 
-const pointVenteRoutes = express.Router();
+const router = express.Router();
 
-pointVenteRoutes.get(
-  "/",
-  authenticate,
-  // authorize(["SuperAdmin", "AdminRegion"]),
-  getAllPointVentes,
-);
-pointVenteRoutes.post(
+/**
+ * IMPORTANT :
+ * - Déclare /search et /by-region AVANT "/:id" pour éviter que "search" ou "by-region"
+ *   soient pris pour un :id.
+ */
+
+// Liste paginée / triée / filtrée
+router.get(
   "/",
   authenticate,
   authorize(["SuperAdmin", "AdminRegion"]),
-  createPointVente,
+  getAllPointVentes
 );
-pointVenteRoutes.get("/region/:regionId", authenticate, getPointVentesByRegion);
-pointVenteRoutes.delete(
+
+// Recherche paginée (mêmes query params)
+router.get(
+  "/search",
+  authenticate,
+  authorize(["SuperAdmin", "AdminRegion"]),
+  searchPointVentes
+);
+
+// Listing par région (compat + même pagination/tri via querystring)
+router.get(
+  "/by-region/:regionId",
+  authenticate,
+  authorize(["SuperAdmin", "AdminRegion"]),
+  getPointVentesByRegion
+);
+
+// Détail
+router.get(
   "/:id",
   authenticate,
   authorize(["SuperAdmin", "AdminRegion"]),
-  deletePointVente,
+  getPointVenteById
 );
-pointVenteRoutes.get("/:id", authenticate, getPointVenteById);
-pointVenteRoutes.put(
+
+// Création
+router.post(
+  "/",
+  authenticate,
+  authorize(["SuperAdmin", "AdminRegion"]),
+  createPointVente
+);
+
+// Mise à jour
+router.put(
   "/:id",
   authenticate,
   authorize(["SuperAdmin", "AdminRegion"]),
-  updatePointVente,
+  updatePointVente
 );
 
-export default pointVenteRoutes;
+// Suppression (cascade + fallback gérés côté controller)
+router.delete(
+  "/:id",
+  authenticate,
+  authorize(["SuperAdmin", "AdminRegion"]),
+  deletePointVente
+);
+
+export default router;

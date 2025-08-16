@@ -7,11 +7,12 @@ const express_1 = __importDefault(require("express"));
 const auth_1 = require("../Middlewares/auth");
 const commandeProduitController_1 = require("../Controllers/commandeProduitController");
 const commandeProduitRouter = express_1.default.Router();
+/** ⚠️ Ordre: chemins spécifiques d’abord */
 commandeProduitRouter.get("/by-user/:userId", auth_1.authenticate, commandeProduitController_1.getCommandeProduitsByUser);
-commandeProduitRouter.get("/by-pointvente/:pointVenteId", auth_1.authenticate, commandeProduitController_1.getCommandeProduitsByPointVente);
+commandeProduitRouter.get("/by-point-vente/:pointVenteId", auth_1.authenticate, commandeProduitController_1.getCommandeProduitsByPointVente);
 commandeProduitRouter.get("/by-region/:regionId", auth_1.authenticate, commandeProduitController_1.getCommandeProduitsByRegion);
+/** Détail d’une commande (commande + produits) */
 commandeProduitRouter.get("/:commandeId", auth_1.authenticate, commandeProduitController_1.getCommandeById);
-commandeProduitRouter.post("/", auth_1.authenticate, commandeProduitController_1.createCommande);
-//commandeProduitRouter.put("/:commandeId", authenticate, updateCommande);
-commandeProduitRouter.delete("/:commandeId", auth_1.authenticate, commandeProduitController_1.deleteCommande);
+/** Mettre à jour UNE ligne de commande */
+commandeProduitRouter.put("/ligne/:id", auth_1.authenticate, commandeProduitController_1.updateCommandeProduit);
 exports.default = commandeProduitRouter;
