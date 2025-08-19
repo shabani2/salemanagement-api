@@ -5,7 +5,9 @@ import { Stock } from "../Models/model";
 
 /* ------------------------------ Utils parsing ------------------------------ */
 const toObjectId = (v?: any) =>
-  typeof v === "string" && Types.ObjectId.isValid(v) ? new Types.ObjectId(v) : undefined;
+  typeof v === "string" && Types.ObjectId.isValid(v)
+    ? new Types.ObjectId(v)
+    : undefined;
 
 const parseBool = (v: any, def = false) => {
   if (v === true || v === false) return v;
@@ -80,7 +82,10 @@ export const getAllStocks = async (req: Request, res: Response) => {
     const produitId = toObjectId(produitQ);
     const pvId = toObjectId(pointVenteQ);
     const regionId = toObjectId(regionQ);
-    const depotCentral = typeof depotCentralQ !== "undefined" ? parseBool(depotCentralQ) : undefined;
+    const depotCentral =
+      typeof depotCentralQ !== "undefined"
+        ? parseBool(depotCentralQ)
+        : undefined;
 
     if (produitId) match.produit = produitId;
     if (pvId) match.pointVente = pvId;
@@ -88,8 +93,11 @@ export const getAllStocks = async (req: Request, res: Response) => {
     if (typeof depotCentral === "boolean") match.depotCentral = depotCentral;
 
     // Recherche texte (via $lookup), si q fourni
-    const q = typeof qQ === "string" && qQ.trim().length ? qQ.trim() : undefined;
-    const regex = q ? new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") : undefined;
+    const q =
+      typeof qQ === "string" && qQ.trim().length ? qQ.trim() : undefined;
+    const regex = q
+      ? new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i")
+      : undefined;
 
     // Pipeline d'agrégation
     const pipeline: PipelineStage[] = [
@@ -296,7 +304,8 @@ export const getStockById = async (req: Request, res: Response) => {
 /* -------------------------------- POST /stocks ----------------------------- */
 export const createStock = async (req: Request, res: Response) => {
   try {
-    const { produit, quantite, montant, pointVente, region, depotCentral } = req.body;
+    const { produit, quantite, montant, pointVente, region, depotCentral } =
+      req.body;
 
     const produitId = toObjectId(produit);
     const pvId = toObjectId(pointVente);
@@ -342,7 +351,8 @@ export const updateStock = async (req: Request, res: Response) => {
       return;
     }
 
-    const { produit, quantite, montant, pointVente, region, depotCentral } = req.body;
+    const { produit, quantite, montant, pointVente, region, depotCentral } =
+      req.body;
 
     const produitId = toObjectId(produit);
     const pvId = toObjectId(pointVente);
@@ -372,7 +382,7 @@ export const updateStock = async (req: Request, res: Response) => {
         region: regionId,
         depotCentral: depot,
       },
-      { new: true, runValidators: true }
+      { new: true, runValidators: true },
     );
 
     if (!updated) {
@@ -411,7 +421,7 @@ export const deleteStock = async (req: Request, res: Response) => {
 export const checkStock = async (
   type: string,
   produitId: string,
-  pointVenteId?: string
+  pointVenteId?: string,
 ): Promise<number> => {
   if (!Types.ObjectId.isValid(produitId)) {
     return 0;

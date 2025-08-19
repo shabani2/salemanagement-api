@@ -70,6 +70,8 @@ const generateStockPdf = (req, res) => __awaiter(void 0, void 0, void 0, functio
                 .fontSize(8)
                 .font("Helvetica")
                 .text(`RCCM : ${organisation.rccm}`, 110, 46)
+                // .text(`ID NAT : ${organisation.idNat}`, 110, 46)
+                // .text(`NIF : ${organisation.numeroImpot}`, 110, 46)
                 .text(`Contact : ${organisation.contact}`, 110, 60)
                 .text(`Adresse : ${organisation.siegeSocial}`, 110, 74)
                 .text(`Pays : ${organisation.pays}`, 110, 88);
@@ -80,8 +82,9 @@ const generateStockPdf = (req, res) => __awaiter(void 0, void 0, void 0, functio
                     .fillAndStroke("#f5f5f5", "#cccccc")
                     .fillColor("#333")
                     .fontSize(8)
-                    .text(`idNat : ${(_a = organisation.idNat) !== null && _a !== void 0 ? _a : "-"}`, 360, 28)
-                    .text(`TVA : ${(_b = organisation.numeroImpot) !== null && _b !== void 0 ? _b : "-"}`, 360, 42)
+                    .text(`ID NAT : ${(_a = organisation.idNat) !== null && _a !== void 0 ? _a : "-"}`, 110, 102)
+                    .fontSize(8)
+                    .text(`NIF : ${(_b = organisation.numeroImpot) !== null && _b !== void 0 ? _b : "-"}`, 110, 112)
                     .fillColor("black");
             }
         };

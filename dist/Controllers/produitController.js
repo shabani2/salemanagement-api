@@ -109,7 +109,9 @@ const searchProduit = (req, res) => __awaiter(void 0, void 0, void 0, function* 
         });
     }
     catch (err) {
-        res.status(500).json({ message: "Erreur lors de la recherche", error: err });
+        res
+            .status(500)
+            .json({ message: "Erreur lors de la recherche", error: err });
     }
 });
 exports.searchProduit = searchProduit;
@@ -222,7 +224,9 @@ const deleteProduit = (req, res) => __awaiter(void 0, void 0, void 0, function* 
             if (r === "NOT_FOUND")
                 throw { status: 404, message: "Produit non trouvé" };
         }));
-        res.json({ message: "Produit supprimé avec succès (cascade en transaction)" });
+        res.json({
+            message: "Produit supprimé avec succès (cascade en transaction)",
+        });
     }
     catch (err) {
         // --- 2) Fallback si transactions non supportées ---
@@ -235,7 +239,9 @@ const deleteProduit = (req, res) => __awaiter(void 0, void 0, void 0, function* 
                     res.status(404).json({ message: "Produit non trouvé" });
                     return;
                 }
-                res.json({ message: "Produit supprimé avec succès (cascade sans transaction)" });
+                res.json({
+                    message: "Produit supprimé avec succès (cascade sans transaction)",
+                });
                 return;
             }
             catch (e2) {

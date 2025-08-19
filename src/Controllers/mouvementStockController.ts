@@ -1,35 +1,66 @@
 // controllers/mvtStockController.ts
-import { Request, Response } from 'express';
-import mongoose from 'mongoose';
-import { MouvementStock } from '../Models/model'; // <- adapte le chemin si besoin
+import { Request, Response } from "express";
+import mongoose from "mongoose";
+import { MouvementStock } from "../Models/model"; // adapte le chemin si besoin
+import {
+  startOfDay,
+  endOfDay,
+  startOfWeek,
+  endOfWeek,
+  startOfMonth,
+  endOfMonth,
+  startOfYear,
+  endOfYear,
+} from "date-fns";
+import frLocale, { fr } from "date-fns/locale"; //
 
-type Order = 'asc' | 'desc';
+type Order = "asc" | "desc";
 
-/* ============================== Helpers ============================== */
+type Period = "jour" | "semaine" | "mois" | "annee" | "tout";
 
-const toInt = (v: any, d = 0) => {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : d;
+const parseDateRange = (q: any) => {
+  // priorité aux paramètres explicites dateFrom/dateTo
+  const df = q.dateFrom ? new Date(String(q.dateFrom)) : null;
+  const dt = q.dateTo ? new Date(String(q.dateTo)) : null;
+  if (df && !isNaN(df.getTime()) && dt && !isNaN(dt.getTime())) {
+    return { $gte: df, $lte: dt };
+  }
+
+  // sinon on accepte period (+ month + year)
+  const period = (q.period as Period) ?? "tout";
+  const now = new Date();
+
+  if (period === "jour") {
+    return { $gte: startOfDay(now), $lte: endOfDay(now) };
+  }
+  if (period === "semaine") {
+    // semaine courante (lundi-dimanche)
+    const so = startOfWeek(now, { weekStartsOn: 1, locale: fr });
+    const eo = endOfWeek(now, { weekStartsOn: 1, locale: fr });
+    return { $gte: so, $lte: eo };
+  }
+  if (period === "mois") {
+    const y = Number(q.year ?? now.getFullYear());
+    const m0 = Math.max(0, Math.min(11, Number(q.month ?? now.getMonth()))); // 0..11
+    return {
+      $gte: startOfMonth(new Date(y, m0, 1)),
+      $lte: endOfMonth(new Date(y, m0, 1)),
+    };
+  }
+  if (period === "annee") {
+    const y = Number(q.year ?? now.getFullYear());
+    return {
+      $gte: startOfYear(new Date(y, 0, 1)),
+      $lte: endOfYear(new Date(y, 0, 1)),
+    };
+  }
+
+  return null; // 'tout' → pas de filtre temps
 };
-
-/** Filtre texte simple (champ directs). Pour rechercher dans les refs (produit.nom, etc.),
- *  il faudrait passer par une agrégation + $lookup + $unwind + $match.
- *  Ici on garde un LIKE léger sur des champs présents dans la collection.
- */
-const like = (q?: string) =>
-  q && q.trim()
-    ? {
-        $or: [
-          // adapter selon le schéma réel si vous stockez ces champs
-          { type: { $regex: q, $options: 'i' } },
-          // { someDenormalizedField: { $regex: q, $options: 'i' } },
-        ],
-      }
-    : {};
 
 const buildFilter = (query: any) => {
   const f: any = {};
-  if (query.type && query.type !== 'Tout') f.type = String(query.type);
+  if (query.type && query.type !== "Tout") f.type = String(query.type);
 
   if (query.pointVente && mongoose.Types.ObjectId.isValid(query.pointVente)) {
     f.pointVente = new mongoose.Types.ObjectId(query.pointVente);
@@ -38,98 +69,127 @@ const buildFilter = (query: any) => {
     f.region = new mongoose.Types.ObjectId(query.region);
   }
 
-  // Vous pouvez ajouter d'autres filtres si nécessaire (user, date, etc.)
+  // 🔥 filtre temps (createdAt)
+  const createdAtRange = parseDateRange(query);
+  if (createdAtRange) f.createdAt = createdAtRange;
+
+  // Ajoute d’autres filtres si besoin (produit, user, statut…)
   return f;
 };
 
+/* ============================== Helpers ============================== */
+
+const toInt = (v: any, d = 0) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : d;
+};
+
+const like = (q?: string) =>
+  q && q.trim()
+    ? {
+        $or: [{ type: { $regex: q, $options: "i" } }],
+      }
+    : {};
+
+// const buildFilter = (query: any) => {
+//   const f: any = {};
+//   if (query.type && query.type !== 'Tout') f.type = String(query.type);
+
+//   if (query.pointVente && mongoose.Types.ObjectId.isValid(query.pointVente)) {
+//     f.pointVente = new mongoose.Types.ObjectId(query.pointVente);
+//   }
+//   if (query.region && mongoose.Types.ObjectId.isValid(query.region)) {
+//     f.region = new mongoose.Types.ObjectId(query.region);
+//   }
+//   // Ajoute ici au besoin : produit, user, statut, dateFrom/dateTo, etc.
+//   return f;
+// };
+
+// Champs triables (champs DIRECTS du modèle)
+const ALLOWED_SORTS = new Set([
+  "createdAt",
+  "updatedAt",
+  "type",
+  "quantite",
+  "montant",
+  "statut",
+]);
+
 /**
- * Parse pagination de façon tolérante :
- * - Par défaut : `page` est 0-based → skip = page * limit
- * - Si `first`/`offset` est fourni, on l'utilise directement
- * - Option `page1=true` pour un mode 1-based (skip = (page-1)*limit)
+ * Pagination tolérante :
+ * - si first/offset est fourni => offset-based
+ * - sinon page 0-based -> skip = page*limit
  */
 const parsePaging = (req: Request) => {
   const limit = Math.max(1, toInt(req.query.limit, 10));
-
-  // Mode "offset" prioritaire si present
-  const hasOffset = req.query.first !== undefined || req.query.offset !== undefined;
-  if (hasOffset) {
-    const offset = Math.max(0, toInt(req.query.first ?? req.query.offset, 0));
-    return { limit, skip: offset, page: Math.floor(offset / limit) };
+  if (req.query.first !== undefined || req.query.offset !== undefined) {
+    const first = Math.max(0, toInt(req.query.first ?? req.query.offset, 0));
+    return { limit, skip: first, first };
   }
-
-  // Sinon, on lit "page"
-  const rawPage = toInt(req.query.page, 0);
-  const page1 = String(req.query.page1 || '').toLowerCase() === 'true';
-  const page = Math.max(0, rawPage);
-
-  const skip = page1
-    ? Math.max(0, (page - 1) * limit) // 1-based si page1=true
-    : page * limit; // 0-based par défaut
-
-  return { limit, skip, page };
+  const page = Math.max(0, toInt(req.query.page, 0));
+  const skip = page * limit;
+  return { limit, skip, first: skip };
 };
 
 /* ============================== Controllers ============================== */
 
 /**
  * GET /mouvements
- * Query params supportés :
- * - page (0-based par défaut), limit
- * - OU first/offset + limit
- * - page1=true pour forcer un comportement 1-based sur "page"
- * - sortBy, order (asc|desc)
- * - q (recherche légère), type, region, pointVente
- * - includeTotal=true|false, includeRefs=true|false
+ * Query:
+ *  - first/limit (offset-based) OU page/limit (0-based)
+ *  - sortBy/order
+ *  - q + filtres (type, region, pointVente, ...)
+ *  - includeTotal, includeRefs
  */
 export const listMouvementsStock = async (req: Request, res: Response) => {
   try {
-    const { limit, skip, page } = parsePaging(req);
-    const sortBy = (req.query.sortBy as string) || 'createdAt';
-    const order: Order = (req.query.order as Order) === 'asc' ? 'asc' : 'desc';
-    const includeTotal = String(req.query.includeTotal || 'true') === 'true';
-    const includeRefs = String(req.query.includeRefs || 'true') === 'true';
-    const q = (req.query.q as string) || '';
+    const { limit, skip, first } = parsePaging(req);
+    const rawSortBy = (req.query.sortBy as string) || "createdAt";
+    const order: Order = (req.query.order as Order) === "asc" ? "asc" : "desc";
+    const includeTotal = String(req.query.includeTotal || "true") === "true";
+    const includeRefs = String(req.query.includeRefs || "true") === "true";
+    const q = (req.query.q as string) || "";
+
+    // Normalisation du tri : pas de champs "dotés" (ex. produit.nom)
+    const sortBy = ALLOWED_SORTS.has(rawSortBy) ? rawSortBy : "createdAt";
+    const sort: Record<string, 1 | -1> = {
+      [sortBy]: order === "asc" ? 1 : -1,
+      _id: order === "asc" ? 1 : -1, // tri secondaire stable
+    };
 
     const filter = {
       ...buildFilter(req.query),
       ...like(q),
     };
 
-    // Requête principale
-    let cursor = MouvementStock.find(filter)
-      .sort({ [sortBy]: order === 'asc' ? 1 : -1 })
-      .skip(skip)
-      .limit(limit);
+    let cursor = MouvementStock.find(filter).sort(sort).skip(skip).limit(limit);
 
     if (includeRefs) {
       cursor = cursor
         .populate({
-          path: 'produit',
-          populate: { path: 'categorie', model: 'Categorie' },
+          path: "produit",
+          populate: { path: "categorie", model: "Categorie" },
         })
         .populate({
-          path: 'pointVente',
-          populate: { path: 'region', model: 'Region' },
+          path: "pointVente",
+          populate: { path: "region", model: "Region" },
         })
-        .populate('region')
-        .populate({ path: 'user', select: '-password' });
+        .populate("region")
+        .populate({ path: "user", select: "-password" });
     }
 
     const [items, total] = await Promise.all([
       cursor.exec(),
-      includeTotal ? MouvementStock.countDocuments(filter) : Promise.resolve(undefined),
+      includeTotal
+        ? MouvementStock.countDocuments(filter)
+        : Promise.resolve(undefined),
     ]);
-
-    // ⚠️ IMPORTANT : ne projetez/pas d’écrasement de champ `type` ici.
-    // Pas de `$project: { type: 'Entrée' }` → sinon "Entrée" partout.
 
     res.json({
       data: items,
       meta: {
-        page,          // 0-based
+        first, // offset courant
         limit,
-        skip,
         total: total ?? items.length,
         sortBy,
         order,
@@ -138,7 +198,7 @@ export const listMouvementsStock = async (req: Request, res: Response) => {
     });
   } catch (err) {
     res.status(500).json({
-      message: 'Erreur interne lors de la récupération des mouvements.',
+      message: "Erreur interne lors de la récupération des mouvements.",
       error: (err as Error).message,
     });
   }
@@ -151,31 +211,31 @@ export const getMouvementById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      res.status(400).json({ message: 'ID invalide' });
+      res.status(400).json({ message: "ID invalide" });
       return;
     }
 
     const doc = await MouvementStock.findById(id)
       .populate({
-        path: 'produit',
-        populate: { path: 'categorie', model: 'Categorie' },
+        path: "produit",
+        populate: { path: "categorie", model: "Categorie" },
       })
       .populate({
-        path: 'pointVente',
-        populate: { path: 'region', model: 'Region' },
+        path: "pointVente",
+        populate: { path: "region", model: "Region" },
       })
-      .populate('region')
-      .populate({ path: 'user', select: '-password' });
+      .populate("region")
+      .populate({ path: "user", select: "-password" });
 
     if (!doc) {
-      res.status(404).json({ message: 'Mouvement non trouvé' });
+      res.status(404).json({ message: "Mouvement non trouvé" });
       return;
     }
 
     res.json(doc);
   } catch (err) {
     res.status(500).json({
-      message: 'Erreur interne lors de la récupération du mouvement.',
+      message: "Erreur interne lors de la récupération du mouvement.",
       error: (err as Error).message,
     });
   }
@@ -183,19 +243,32 @@ export const getMouvementById = async (req: Request, res: Response) => {
 
 /**
  * POST /mouvements
- * Body attendu (à adapter à votre schéma) :
- * { produit, quantite, montant, type, user, pointVente?, region?, depotCentral? }
+ * -> utilise .save() => déclenche bien pre('save') / post('save')
  */
 export const createMouvementStock = async (req: Request, res: Response) => {
   try {
-    const { produit, quantite, montant, type, user, pointVente, region, depotCentral } = req.body;
+    const {
+      produit,
+      quantite,
+      montant,
+      type,
+      user,
+      pointVente,
+      region,
+      depotCentral,
+      statut,
+    } = req.body;
 
     if (!produit || !quantite || !type || !user) {
-      res.status(400).json({ message: 'Champs requis manquants (produit, quantite, type, user).' });
+      res
+        .status(400)
+        .json({
+          message: "Champs requis manquants (produit, quantite, type, user).",
+        });
       return;
     }
 
-    const mouvement = await new MouvementStock({
+    const mouvement = new MouvementStock({
       produit,
       quantite,
       montant: montant ?? 0,
@@ -204,25 +277,28 @@ export const createMouvementStock = async (req: Request, res: Response) => {
       pointVente: pointVente || undefined,
       region: region || undefined,
       depotCentral: !!depotCentral,
-      statut: false,
-    }).save();
+      ...(typeof statut === "boolean" ? { statut } : {}),
+    });
+
+    // ⇩⇩⇩ TRIGGER pre/post('save')
+    await mouvement.save();
 
     const populated = await MouvementStock.findById(mouvement._id)
       .populate({
-        path: 'produit',
-        populate: { path: 'categorie', model: 'Categorie' },
+        path: "produit",
+        populate: { path: "categorie", model: "Categorie" },
       })
       .populate({
-        path: 'pointVente',
-        populate: { path: 'region', model: 'Region' },
+        path: "pointVente",
+        populate: { path: "region", model: "Region" },
       })
-      .populate('region')
-      .populate({ path: 'user', select: '-password' });
+      .populate("region")
+      .populate({ path: "user", select: "-password" });
 
     res.status(201).json(populated);
   } catch (err) {
     res.status(500).json({
-      message: 'Erreur lors de la création du mouvement.',
+      message: "Erreur lors de la création du mouvement.",
       error: (err as Error).message,
     });
   }
@@ -230,39 +306,42 @@ export const createMouvementStock = async (req: Request, res: Response) => {
 
 /**
  * PUT /mouvements/:id
+ * -> **NE PAS** utiliser findByIdAndUpdate si l’on veut déclencher les hooks save.
+ *    On charge le doc, on set(), puis doc.save()
  */
 export const updateMouvementStock = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      res.status(400).json({ message: 'ID invalide' });
+      res.status(400).json({ message: "ID invalide" });
       return;
     }
 
+    const doc = await MouvementStock.findById(id);
+    if (!doc) {
+      res.status(404).json({ message: "Mouvement non trouvé" });
+      return;
+    }
+
+    // Mettre à jour les champs autorisés
     const payload = req.body ?? {};
-    // Ne JAMAIS forcer ici un `type` constant.
+    doc.set(payload);
 
-    const updated = await MouvementStock.findByIdAndUpdate(id, payload, { new: true })
-      .populate({
-        path: 'produit',
-        populate: { path: 'categorie', model: 'Categorie' },
-      })
-      .populate({
-        path: 'pointVente',
-        populate: { path: 'region', model: 'Region' },
-      })
-      .populate('region')
-      .populate({ path: 'user', select: '-password' });
+    // ⇩⇩⇩ TRIGGER pre/post('save')
+    await doc.save();
 
-    if (!updated) {
-      res.status(404).json({ message: 'Mouvement non trouvé' });
-      return;
-    }
+    // Re-populer pour la réponse
+    await doc.populate([
+      { path: "produit", populate: { path: "categorie", model: "Categorie" } },
+      { path: "pointVente", populate: { path: "region", model: "Region" } },
+      { path: "region" },
+      { path: "user", select: "-password" },
+    ]);
 
-    res.json(updated);
+    res.json(doc);
   } catch (err) {
     res.status(500).json({
-      message: 'Erreur lors de la mise à jour du mouvement.',
+      message: "Erreur lors de la mise à jour du mouvement.",
       error: (err as Error).message,
     });
   }
@@ -270,25 +349,26 @@ export const updateMouvementStock = async (req: Request, res: Response) => {
 
 /**
  * DELETE /mouvements/:id
+ * (tes hooks sont sur save, donc pas d’impact ici)
  */
 export const deleteMouvementStock = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      res.status(400).json({ message: 'ID invalide' });
+      res.status(400).json({ message: "ID invalide" });
       return;
     }
 
     const deleted = await MouvementStock.findByIdAndDelete(id);
     if (!deleted) {
-      res.status(404).json({ message: 'Mouvement non trouvé' });
+      res.status(404).json({ message: "Mouvement non trouvé" });
       return;
     }
 
-    res.json({ message: 'Mouvement supprimé avec succès' });
+    res.json({ message: "Mouvement supprimé avec succès" });
   } catch (err) {
     res.status(500).json({
-      message: 'Erreur lors de la suppression du mouvement.',
+      message: "Erreur lors de la suppression du mouvement.",
       error: (err as Error).message,
     });
   }
@@ -296,56 +376,39 @@ export const deleteMouvementStock = async (req: Request, res: Response) => {
 
 /**
  * PATCH /mouvements/:id/validate
- * Valide un mouvement (statut=true). A ajuster si vous mettez à jour un Stock associé ici.
+ * -> idem : on charge, on modifie, on save() pour déclencher les hooks
  */
 export const validateMouvementStock = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      res.status(400).json({ message: 'ID invalide' });
+      res.status(400).json({ message: "ID invalide" });
       return;
     }
 
-    const updated = await MouvementStock.findByIdAndUpdate(
-      id,
-      { $set: { statut: true } },
-      { new: true }
-    )
-      .populate({
-        path: 'produit',
-        populate: { path: 'categorie', model: 'Categorie' },
-      })
-      .populate({
-        path: 'pointVente',
-        populate: { path: 'region', model: 'Region' },
-      })
-      .populate('region')
-      .populate({ path: 'user', select: '-password' });
-
-    if (!updated) {
-      res.status(404).json({ message: 'Mouvement non trouvé' });
+    const doc = await MouvementStock.findById(id);
+    if (!doc) {
+      res.status(404).json({ message: "Mouvement non trouvé" });
       return;
     }
 
-    res.json({ success: true, mouvement: updated });
+    doc.statut = true;
+
+    // ⇩⇩⇩ TRIGGER pre/post('save')
+    await doc.save();
+
+    await doc.populate([
+      { path: "produit", populate: { path: "categorie", model: "Categorie" } },
+      { path: "pointVente", populate: { path: "region", model: "Region" } },
+      { path: "region" },
+      { path: "user", select: "-password" },
+    ]);
+
+    res.json({ success: true, mouvement: doc });
   } catch (err) {
     res.status(500).json({
-      message: 'Erreur lors de la validation du mouvement.',
+      message: "Erreur lors de la validation du mouvement.",
       error: (err as Error).message,
     });
   }
 };
-
-/* ------------------------------ Aggregations ------------------------------- */
-/**
- * GET /mouvements/aggregate
- * Params:
- *   groupBy: "produit" | "produit_type"   (par défaut "produit")
- *   page, limit (pagination)
- *   + mêmes filtres que listing: region, pointVente, user, produit, type, statut, depotCentral, dateFrom, dateTo
- *
- * Renvoie: { data: [...], meta }
- * - groupBy=produit       => totalQuantite, totalMontant, count par produit
- * - groupBy=produit_type  => totalQuantite, totalMontant, count par (produit, type)
- */
-

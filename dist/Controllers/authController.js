@@ -87,10 +87,9 @@ const register = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         console.error("Erreur d'upload complète:", uploadError);
         res.status(500).json({
             message: "Échec de l'upload de l'image",
-            error: uploadError instanceof Error ? uploadError.message : uploadError
+            error: uploadError instanceof Error ? uploadError.message : uploadError,
         });
     }
-    ;
 });
 exports.register = register;
 const login = (req, res) => __awaiter(void 0, void 0, void 0, function* () {

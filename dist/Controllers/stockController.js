@@ -13,7 +13,9 @@ exports.checkStockHandler = exports.checkStock = exports.deleteStock = exports.u
 const mongoose_1 = require("mongoose");
 const model_1 = require("../Models/model");
 /* ------------------------------ Utils parsing ------------------------------ */
-const toObjectId = (v) => typeof v === "string" && mongoose_1.Types.ObjectId.isValid(v) ? new mongoose_1.Types.ObjectId(v) : undefined;
+const toObjectId = (v) => typeof v === "string" && mongoose_1.Types.ObjectId.isValid(v)
+    ? new mongoose_1.Types.ObjectId(v)
+    : undefined;
 const parseBool = (v, def = false) => {
     if (v === true || v === false)
         return v;
@@ -71,7 +73,9 @@ const getAllStocks = (req, res) => __awaiter(void 0, void 0, void 0, function* (
         const produitId = toObjectId(produitQ);
         const pvId = toObjectId(pointVenteQ);
         const regionId = toObjectId(regionQ);
-        const depotCentral = typeof depotCentralQ !== "undefined" ? parseBool(depotCentralQ) : undefined;
+        const depotCentral = typeof depotCentralQ !== "undefined"
+            ? parseBool(depotCentralQ)
+            : undefined;
         if (produitId)
             match.produit = produitId;
         if (pvId)
@@ -82,7 +86,9 @@ const getAllStocks = (req, res) => __awaiter(void 0, void 0, void 0, function* (
             match.depotCentral = depotCentral;
         // Recherche texte (via $lookup), si q fourni
         const q = typeof qQ === "string" && qQ.trim().length ? qQ.trim() : undefined;
-        const regex = q ? new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") : undefined;
+        const regex = q
+            ? new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i")
+            : undefined;
         // Pipeline d'agrégation
         const pipeline = [
             { $match: match },
@@ -168,6 +174,7 @@ const getAllStocks = (req, res) => __awaiter(void 0, void 0, void 0, function* (
                         tva: "$produitDoc.tva",
                         prixVente: "$produitDoc.prixVente",
                         netTopay: "$produitDoc.netTopay",
+                        seuil: "$produitDoc.seuil",
                         categorie: {
                             _id: "$categorieDoc._id",
                             nom: "$categorieDoc.nom",

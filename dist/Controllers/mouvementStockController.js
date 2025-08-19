@@ -12,203 +12,257 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.aggregateMouvements = exports.validateState = exports.deleteMouvementStock = exports.updateMouvementStock = exports.createMouvementStock = exports.getMouvementStockById = exports.searchMouvementsStock = exports.getAllMouvementsStock = void 0;
+exports.validateMouvementStock = exports.deleteMouvementStock = exports.updateMouvementStock = exports.createMouvementStock = exports.getMouvementById = exports.listMouvementsStock = void 0;
 const mongoose_1 = __importDefault(require("mongoose"));
-const model_1 = require("../Models/model");
-/* ---------------------------------- Utils --------------------------------- */
-const toBool = (v, d = false) => {
-    if (typeof v === "boolean")
-        return v;
-    if (typeof v === "string")
-        return v.toLowerCase() === "true";
-    return d;
+const model_1 = require("../Models/model"); // adapte le chemin si besoin
+const date_fns_1 = require("date-fns");
+const locale_1 = require("date-fns/locale"); //
+const parseDateRange = (q) => {
+    var _a, _b, _c, _d;
+    // priorité aux paramètres explicites dateFrom/dateTo
+    const df = q.dateFrom ? new Date(String(q.dateFrom)) : null;
+    const dt = q.dateTo ? new Date(String(q.dateTo)) : null;
+    if (df && !isNaN(df.getTime()) && dt && !isNaN(dt.getTime())) {
+        return { $gte: df, $lte: dt };
+    }
+    // sinon on accepte period (+ month + year)
+    const period = (_a = q.period) !== null && _a !== void 0 ? _a : "tout";
+    const now = new Date();
+    if (period === "jour") {
+        return { $gte: (0, date_fns_1.startOfDay)(now), $lte: (0, date_fns_1.endOfDay)(now) };
+    }
+    if (period === "semaine") {
+        // semaine courante (lundi-dimanche)
+        const so = (0, date_fns_1.startOfWeek)(now, { weekStartsOn: 1, locale: locale_1.fr });
+        const eo = (0, date_fns_1.endOfWeek)(now, { weekStartsOn: 1, locale: locale_1.fr });
+        return { $gte: so, $lte: eo };
+    }
+    if (period === "mois") {
+        const y = Number((_b = q.year) !== null && _b !== void 0 ? _b : now.getFullYear());
+        const m0 = Math.max(0, Math.min(11, Number((_c = q.month) !== null && _c !== void 0 ? _c : now.getMonth()))); // 0..11
+        return {
+            $gte: (0, date_fns_1.startOfMonth)(new Date(y, m0, 1)),
+            $lte: (0, date_fns_1.endOfMonth)(new Date(y, m0, 1)),
+        };
+    }
+    if (period === "annee") {
+        const y = Number((_d = q.year) !== null && _d !== void 0 ? _d : now.getFullYear());
+        return {
+            $gte: (0, date_fns_1.startOfYear)(new Date(y, 0, 1)),
+            $lte: (0, date_fns_1.endOfYear)(new Date(y, 0, 1)),
+        };
+    }
+    return null; // 'tout' → pas de filtre temps
 };
-const parsePagination = (req) => {
-    var _a, _b;
-    const page = Math.max(1, parseInt(String((_a = req.query.page) !== null && _a !== void 0 ? _a : "1"), 10) || 1);
-    const limit = Math.min(100, Math.max(1, parseInt(String((_b = req.query.limit) !== null && _b !== void 0 ? _b : "10"), 10) || 10));
-    const skip = (page - 1) * limit;
-    const sortBy = req.query.sortBy || "createdAt";
-    const order = (req.query.order || "desc").toLowerCase() === "asc" ? 1 : -1;
-    const sort = { [sortBy]: order };
-    return { page, limit, skip, sort, sortBy, order };
+const buildFilter = (query) => {
+    const f = {};
+    if (query.type && query.type !== "Tout")
+        f.type = String(query.type);
+    if (query.pointVente && mongoose_1.default.Types.ObjectId.isValid(query.pointVente)) {
+        f.pointVente = new mongoose_1.default.Types.ObjectId(query.pointVente);
+    }
+    if (query.region && mongoose_1.default.Types.ObjectId.isValid(query.region)) {
+        f.region = new mongoose_1.default.Types.ObjectId(query.region);
+    }
+    // 🔥 filtre temps (createdAt)
+    const createdAtRange = parseDateRange(query);
+    if (createdAtRange)
+        f.createdAt = createdAtRange;
+    // Ajoute d’autres filtres si besoin (produit, user, statut…)
+    return f;
 };
-const paginationMeta = (page, limit, total) => {
-    const totalPages = Math.max(1, Math.ceil(total / limit));
-    return { page, limit, total, totalPages, hasPrev: page > 1, hasNext: page < totalPages };
+/* ============================== Helpers ============================== */
+const toInt = (v, d = 0) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : d;
 };
-const basePopulate = [
-    { path: "region" },
-    { path: "pointVente", populate: { path: "region", model: "Region" } },
-    { path: "produit", populate: { path: "categorie", model: "Categorie" } },
-    { path: "user", populate: [{ path: "pointVente", model: "PointVente" }, { path: "region", model: "Region" }] },
-];
+const like = (q) => q && q.trim()
+    ? {
+        $or: [{ type: { $regex: q, $options: "i" } }],
+    }
+    : {};
+// const buildFilter = (query: any) => {
+//   const f: any = {};
+//   if (query.type && query.type !== 'Tout') f.type = String(query.type);
+//   if (query.pointVente && mongoose.Types.ObjectId.isValid(query.pointVente)) {
+//     f.pointVente = new mongoose.Types.ObjectId(query.pointVente);
+//   }
+//   if (query.region && mongoose.Types.ObjectId.isValid(query.region)) {
+//     f.region = new mongoose.Types.ObjectId(query.region);
+//   }
+//   // Ajoute ici au besoin : produit, user, statut, dateFrom/dateTo, etc.
+//   return f;
+// };
+// Champs triables (champs DIRECTS du modèle)
+const ALLOWED_SORTS = new Set([
+    "createdAt",
+    "updatedAt",
+    "type",
+    "quantite",
+    "montant",
+    "statut",
+]);
 /**
- * Construit le filtre Mongo à partir des query params.
- * - region : inclut les mouvements liés à cette région OU à un PV de cette région
- * - pointVente / user / produit : filtrage direct par ObjectId
- * - q : regex sur "type"
- * - statut / depotCentral : booléens
- * - dateFrom/dateTo : intervalle sur createdAt
+ * Pagination tolérante :
+ * - si first/offset est fourni => offset-based
+ * - sinon page 0-based -> skip = page*limit
  */
-function buildFilter(req) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const { q, region, pointVente, user, produit, type, statut, depotCentral, dateFrom, dateTo, } = req.query;
-        const filter = {};
-        const and = [];
-        if (q) {
-            and.push({ type: { $regex: q, $options: "i" } });
-        }
-        if (type) {
-            and.push({ type });
-        }
-        if (statut !== undefined) {
-            and.push({ statut: toBool(statut) });
-        }
-        if (depotCentral !== undefined) {
-            and.push({ depotCentral: toBool(depotCentral) });
-        }
-        if (pointVente && mongoose_1.default.Types.ObjectId.isValid(pointVente)) {
-            and.push({ pointVente: new mongoose_1.default.Types.ObjectId(pointVente) });
-        }
-        if (user && mongoose_1.default.Types.ObjectId.isValid(user)) {
-            and.push({ user: new mongoose_1.default.Types.ObjectId(user) });
-        }
-        if (produit && mongoose_1.default.Types.ObjectId.isValid(produit)) {
-            and.push({ produit: new mongoose_1.default.Types.ObjectId(produit) });
-        }
-        // date range
-        if (dateFrom || dateTo) {
-            const createdAt = {};
-            if (dateFrom)
-                createdAt.$gte = new Date(dateFrom);
-            if (dateTo) {
-                const d = new Date(dateTo);
-                // inclut la journée complète
-                createdAt.$lte = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
-            }
-            and.push({ createdAt });
-        }
-        // region: match direct région OU PV appartenant à la région
-        if (region && mongoose_1.default.Types.ObjectId.isValid(region)) {
-            const pvIds = yield model_1.PointVente.find({ region: region }, { _id: 1 }).lean();
-            const idList = pvIds.map((p) => p._id);
-            and.push({
-                $or: [
-                    { region: new mongoose_1.default.Types.ObjectId(region) },
-                    ...(idList.length ? [{ pointVente: { $in: idList } }] : []),
-                ],
-            });
-        }
-        if (and.length)
-            filter.$and = and;
-        return filter;
-    });
-}
-/* -------------------------------- Handlers -------------------------------- */
+const parsePaging = (req) => {
+    var _a;
+    const limit = Math.max(1, toInt(req.query.limit, 10));
+    if (req.query.first !== undefined || req.query.offset !== undefined) {
+        const first = Math.max(0, toInt((_a = req.query.first) !== null && _a !== void 0 ? _a : req.query.offset, 0));
+        return { limit, skip: first, first };
+    }
+    const page = Math.max(0, toInt(req.query.page, 0));
+    const skip = page * limit;
+    return { limit, skip, first: skip };
+};
+/* ============================== Controllers ============================== */
 /**
  * GET /mouvements
- * Query: page, limit, sortBy, order, q, region, pointVente, user, produit, type, statut, depotCentral, dateFrom, dateTo
- *        includeTotal (default true), includeRefs (default true)
+ * Query:
+ *  - first/limit (offset-based) OU page/limit (0-based)
+ *  - sortBy/order
+ *  - q + filtres (type, region, pointVente, ...)
+ *  - includeTotal, includeRefs
  */
-const getAllMouvementsStock = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b;
+const listMouvementsStock = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { page, limit, skip, sort } = parsePagination(req);
-        const includeTotal = String((_a = req.query.includeTotal) !== null && _a !== void 0 ? _a : "true") !== "false";
-        const includeRefs = String((_b = req.query.includeRefs) !== null && _b !== void 0 ? _b : "true") !== "false";
-        const filter = yield buildFilter(req);
-        let query = model_1.MouvementStock.find(filter).sort(sort).skip(skip).limit(limit);
+        const { limit, skip, first } = parsePaging(req);
+        const rawSortBy = req.query.sortBy || "createdAt";
+        const order = req.query.order === "asc" ? "asc" : "desc";
+        const includeTotal = String(req.query.includeTotal || "true") === "true";
+        const includeRefs = String(req.query.includeRefs || "true") === "true";
+        const q = req.query.q || "";
+        // Normalisation du tri : pas de champs "dotés" (ex. produit.nom)
+        const sortBy = ALLOWED_SORTS.has(rawSortBy) ? rawSortBy : "createdAt";
+        const sort = {
+            [sortBy]: order === "asc" ? 1 : -1,
+            _id: order === "asc" ? 1 : -1, // tri secondaire stable
+        };
+        const filter = Object.assign(Object.assign({}, buildFilter(req.query)), like(q));
+        let cursor = model_1.MouvementStock.find(filter).sort(sort).skip(skip).limit(limit);
         if (includeRefs) {
-            for (const p of basePopulate)
-                query = query.populate(p);
+            cursor = cursor
+                .populate({
+                path: "produit",
+                populate: { path: "categorie", model: "Categorie" },
+            })
+                .populate({
+                path: "pointVente",
+                populate: { path: "region", model: "Region" },
+            })
+                .populate("region")
+                .populate({ path: "user", select: "-password" });
         }
-        const [data, total] = yield Promise.all([
-            query.exec(),
-            includeTotal ? model_1.MouvementStock.countDocuments(filter) : Promise.resolve(-1),
+        const [items, total] = yield Promise.all([
+            cursor.exec(),
+            includeTotal
+                ? model_1.MouvementStock.countDocuments(filter)
+                : Promise.resolve(undefined),
         ]);
-        res.json({ data, meta: includeTotal ? paginationMeta(page, limit, total) : undefined });
+        res.json({
+            data: items,
+            meta: {
+                first, // offset courant
+                limit,
+                total: total !== null && total !== void 0 ? total : items.length,
+                sortBy,
+                order,
+                q,
+            },
+        });
     }
     catch (err) {
-        res.status(500).json({ message: "Erreur interne", error: err });
+        res.status(500).json({
+            message: "Erreur interne lors de la récupération des mouvements.",
+            error: err.message,
+        });
     }
 });
-exports.getAllMouvementsStock = getAllMouvementsStock;
-/** Alias /search (mêmes query params) */
-const searchMouvementsStock = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    return (0, exports.getAllMouvementsStock)(req, res);
-});
-exports.searchMouvementsStock = searchMouvementsStock;
-/** GET /mouvements/:id?includeRefs=true */
-const getMouvementStockById = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
+exports.listMouvementsStock = listMouvementsStock;
+/**
+ * GET /mouvements/:id
+ */
+const getMouvementById = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { id } = req.params;
-        const includeRefs = String((_a = req.query.includeRefs) !== null && _a !== void 0 ? _a : "true") !== "false";
         if (!mongoose_1.default.Types.ObjectId.isValid(id)) {
             res.status(400).json({ message: "ID invalide" });
             return;
         }
-        let q = model_1.MouvementStock.findById(id);
-        if (includeRefs) {
-            for (const p of basePopulate)
-                q = q.populate(p);
-        }
-        const mouvement = yield q.exec();
-        if (!mouvement) {
+        const doc = yield model_1.MouvementStock.findById(id)
+            .populate({
+            path: "produit",
+            populate: { path: "categorie", model: "Categorie" },
+        })
+            .populate({
+            path: "pointVente",
+            populate: { path: "region", model: "Region" },
+        })
+            .populate("region")
+            .populate({ path: "user", select: "-password" });
+        if (!doc) {
             res.status(404).json({ message: "Mouvement non trouvé" });
             return;
         }
-        res.json(mouvement);
+        res.json(doc);
     }
     catch (err) {
-        res.status(500).json({ message: "Erreur interne", error: err });
+        res.status(500).json({
+            message: "Erreur interne lors de la récupération du mouvement.",
+            error: err.message,
+        });
     }
 });
-exports.getMouvementStockById = getMouvementStockById;
-/** POST /mouvements */
+exports.getMouvementById = getMouvementById;
+/**
+ * POST /mouvements
+ * -> utilise .save() => déclenche bien pre('save') / post('save')
+ */
 const createMouvementStock = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
     try {
-        const { pointVente, depotCentral, produit, type, quantite, montant, statut, region, user, } = req.body;
-        const hasPV = !!pointVente;
-        const hasRegion = !!region;
-        const hasDepot = toBool(depotCentral, false);
-        if (!user) {
-            res.status(400).json({ message: "L'utilisateur est requis" });
-            return;
-        }
-        if (!hasPV && !hasRegion && !hasDepot) {
-            res.status(400).json({
-                message: "Le mouvement doit être associé à un point de vente, une région ou un dépôt central",
+        const { produit, quantite, montant, type, user, pointVente, region, depotCentral, statut, } = req.body;
+        if (!produit || !quantite || !type || !user) {
+            res
+                .status(400)
+                .json({
+                message: "Champs requis manquants (produit, quantite, type, user).",
             });
             return;
         }
-        const payload = {
-            produit,
-            type,
-            quantite,
-            montant,
-            statut: !!statut,
-            user,
-            depotCentral: hasDepot,
-        };
-        if (hasPV)
-            payload.pointVente = pointVente;
-        if (hasRegion)
-            payload.region = region;
-        const mouvement = yield model_1.MouvementStock.create(payload);
-        let created = model_1.MouvementStock.findById(mouvement._id);
-        for (const p of basePopulate)
-            created = created.populate(p);
-        res.status(201).json(yield created.exec());
+        const mouvement = new model_1.MouvementStock(Object.assign({ produit,
+            quantite, montant: montant !== null && montant !== void 0 ? montant : 0, type,
+            user, pointVente: pointVente || undefined, region: region || undefined, depotCentral: !!depotCentral }, (typeof statut === "boolean" ? { statut } : {})));
+        // ⇩⇩⇩ TRIGGER pre/post('save')
+        yield mouvement.save();
+        const populated = yield model_1.MouvementStock.findById(mouvement._id)
+            .populate({
+            path: "produit",
+            populate: { path: "categorie", model: "Categorie" },
+        })
+            .populate({
+            path: "pointVente",
+            populate: { path: "region", model: "Region" },
+        })
+            .populate("region")
+            .populate({ path: "user", select: "-password" });
+        res.status(201).json(populated);
     }
     catch (err) {
-        res.status(400).json({ message: "Erreur lors de la création", error: (_a = err === null || err === void 0 ? void 0 : err.message) !== null && _a !== void 0 ? _a : err });
+        res.status(500).json({
+            message: "Erreur lors de la création du mouvement.",
+            error: err.message,
+        });
     }
 });
 exports.createMouvementStock = createMouvementStock;
-/** PUT /mouvements/:id */
+/**
+ * PUT /mouvements/:id
+ * -> **NE PAS** utiliser findByIdAndUpdate si l’on veut déclencher les hooks save.
+ *    On charge le doc, on set(), puis doc.save()
+ */
 const updateMouvementStock = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     try {
@@ -217,56 +271,37 @@ const updateMouvementStock = (req, res) => __awaiter(void 0, void 0, void 0, fun
             res.status(400).json({ message: "ID invalide" });
             return;
         }
-        const { pointVente, depotCentral, produit, type, quantite, montant, statut, region, user, } = req.body;
-        const hasPV = !!pointVente;
-        const hasRegion = !!region;
-        const hasDepot = toBool(depotCentral, false);
-        if (!user) {
-            res.status(400).json({ message: "L'utilisateur est requis" });
-            return;
-        }
-        if (!hasPV && !hasRegion && !hasDepot) {
-            res.status(400).json({
-                message: "Le mouvement doit être associé à un point de vente, une région ou un dépôt central",
-            });
-            return;
-        }
-        const update = {
-            produit,
-            type,
-            quantite,
-            montant,
-            statut: !!statut,
-            user,
-            depotCentral: hasDepot,
-        };
-        if (hasPV)
-            update.pointVente = pointVente;
-        else
-            update.pointVente = undefined;
-        if (hasRegion)
-            update.region = region;
-        else
-            update.region = undefined;
-        let updated = yield model_1.MouvementStock.findByIdAndUpdate(id, update, {
-            new: true,
-            runValidators: true,
-        });
-        if (!updated) {
+        const doc = yield model_1.MouvementStock.findById(id);
+        if (!doc) {
             res.status(404).json({ message: "Mouvement non trouvé" });
             return;
         }
-        let q = model_1.MouvementStock.findById(updated._id);
-        for (const p of basePopulate)
-            q = q.populate(p);
-        res.json(yield q.exec());
+        // Mettre à jour les champs autorisés
+        const payload = (_a = req.body) !== null && _a !== void 0 ? _a : {};
+        doc.set(payload);
+        // ⇩⇩⇩ TRIGGER pre/post('save')
+        yield doc.save();
+        // Re-populer pour la réponse
+        yield doc.populate([
+            { path: "produit", populate: { path: "categorie", model: "Categorie" } },
+            { path: "pointVente", populate: { path: "region", model: "Region" } },
+            { path: "region" },
+            { path: "user", select: "-password" },
+        ]);
+        res.json(doc);
     }
     catch (err) {
-        res.status(400).json({ message: "Erreur lors de la mise à jour", error: (_a = err === null || err === void 0 ? void 0 : err.message) !== null && _a !== void 0 ? _a : err });
+        res.status(500).json({
+            message: "Erreur lors de la mise à jour du mouvement.",
+            error: err.message,
+        });
     }
 });
 exports.updateMouvementStock = updateMouvementStock;
-/** DELETE /mouvements/:id */
+/**
+ * DELETE /mouvements/:id
+ * (tes hooks sont sur save, donc pas d’impact ici)
+ */
 const deleteMouvementStock = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { id } = req.params;
@@ -274,120 +309,53 @@ const deleteMouvementStock = (req, res) => __awaiter(void 0, void 0, void 0, fun
             res.status(400).json({ message: "ID invalide" });
             return;
         }
-        yield model_1.MouvementStock.findByIdAndDelete(id);
+        const deleted = yield model_1.MouvementStock.findByIdAndDelete(id);
+        if (!deleted) {
+            res.status(404).json({ message: "Mouvement non trouvé" });
+            return;
+        }
         res.json({ message: "Mouvement supprimé avec succès" });
     }
     catch (err) {
-        res.status(500).json({ message: "Erreur interne", error: err });
+        res.status(500).json({
+            message: "Erreur lors de la suppression du mouvement.",
+            error: err.message,
+        });
     }
 });
 exports.deleteMouvementStock = deleteMouvementStock;
-/** PATCH /mouvements/:id/validate -> statut = true */
-const validateState = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+/**
+ * PATCH /mouvements/:id/validate
+ * -> idem : on charge, on modifie, on save() pour déclencher les hooks
+ */
+const validateMouvementStock = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { id } = req.params;
         if (!mongoose_1.default.Types.ObjectId.isValid(id)) {
             res.status(400).json({ message: "ID invalide" });
             return;
         }
-        let mvt = yield model_1.MouvementStock.findByIdAndUpdate(id, { statut: true }, { new: true });
-        if (!mvt) {
+        const doc = yield model_1.MouvementStock.findById(id);
+        if (!doc) {
             res.status(404).json({ message: "Mouvement non trouvé" });
             return;
         }
-        let q = model_1.MouvementStock.findById(mvt._id);
-        for (const p of basePopulate)
-            q = q.populate(p);
-        mvt = yield q.exec();
-        res.json({ message: "Statut du mouvement mis à jour", mouvement: mvt });
+        doc.statut = true;
+        // ⇩⇩⇩ TRIGGER pre/post('save')
+        yield doc.save();
+        yield doc.populate([
+            { path: "produit", populate: { path: "categorie", model: "Categorie" } },
+            { path: "pointVente", populate: { path: "region", model: "Region" } },
+            { path: "region" },
+            { path: "user", select: "-password" },
+        ]);
+        res.json({ success: true, mouvement: doc });
     }
     catch (err) {
-        res.status(500).json({ message: "Erreur lors de la validation", error: err });
-    }
-});
-exports.validateState = validateState;
-/* ------------------------------ Aggregations ------------------------------- */
-/**
- * GET /mouvements/aggregate
- * Params:
- *   groupBy: "produit" | "produit_type"   (par défaut "produit")
- *   page, limit (pagination)
- *   + mêmes filtres que listing: region, pointVente, user, produit, type, statut, depotCentral, dateFrom, dateTo
- *
- * Renvoie: { data: [...], meta }
- * - groupBy=produit       => totalQuantite, totalMontant, count par produit
- * - groupBy=produit_type  => totalQuantite, totalMontant, count par (produit, type)
- */
-const aggregateMouvements = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b, _c, _d;
-    try {
-        const groupBy = req.query.groupBy || "produit";
-        const { page, limit, skip } = parsePagination(req);
-        const filter = yield buildFilter(req);
-        const groupId = groupBy === "produit_type"
-            ? { produit: "$produit", type: "$type" }
-            : { produit: "$produit" };
-        const pipeline = [
-            { $match: filter },
-            {
-                $group: {
-                    _id: groupId,
-                    totalQuantite: { $sum: "$quantite" },
-                    totalMontant: { $sum: "$montant" },
-                    count: { $sum: 1 },
-                },
-            },
-            {
-                $project: Object.assign(Object.assign({ _id: 0, produit: "$_id.produit" }, (groupBy === "produit_type" ? { type: "$_id.type" } : {})), { totalQuantite: 1, totalMontant: 1, count: 1 }),
-            },
-            // tri par nom de produit après lookup
-            {
-                $lookup: {
-                    from: "produits",
-                    localField: "produit",
-                    foreignField: "_id",
-                    as: "produitInfo",
-                },
-            },
-            { $unwind: "$produitInfo" },
-            {
-                $lookup: {
-                    from: "categories",
-                    localField: "produitInfo.categorie",
-                    foreignField: "_id",
-                    as: "categorieInfo",
-                },
-            },
-            { $unwind: { path: "$categorieInfo", preserveNullAndEmptyArrays: true } },
-            {
-                $addFields: {
-                    "produitInfo.categorie": "$categorieInfo",
-                },
-            },
-            { $sort: Object.assign({ "produitInfo.nom": 1 }, (groupBy === "produit_type" ? { type: 1 } : {})) },
-            {
-                $facet: {
-                    metadata: [{ $count: "total" }],
-                    data: [{ $skip: skip }, { $limit: limit }],
-                },
-            },
-        ];
-        const result = yield model_1.MouvementStock.aggregate(pipeline);
-        const metadata = (_b = (_a = result[0]) === null || _a === void 0 ? void 0 : _a.metadata) !== null && _b !== void 0 ? _b : [];
-        const total = metadata.length ? metadata[0].total : 0;
-        const data = ((_d = (_c = result[0]) === null || _c === void 0 ? void 0 : _c.data) !== null && _d !== void 0 ? _d : []).map((row) => {
-            var _a, _b, _c, _d, _e;
-            return (Object.assign(Object.assign({ produit: {
-                    _id: (_a = row.produitInfo) === null || _a === void 0 ? void 0 : _a._id,
-                    nom: (_b = row.produitInfo) === null || _b === void 0 ? void 0 : _b.nom,
-                    code: (_c = row.produitInfo) === null || _c === void 0 ? void 0 : _c.code,
-                    categorie: (_e = (_d = row.produitInfo) === null || _d === void 0 ? void 0 : _d.categorie) !== null && _e !== void 0 ? _e : null,
-                } }, (groupBy === "produit_type" ? { type: row.type } : {})), { totalQuantite: row.totalQuantite, totalMontant: row.totalMontant, count: row.count }));
+        res.status(500).json({
+            message: "Erreur lors de la validation du mouvement.",
+            error: err.message,
         });
-        res.json({ data, meta: paginationMeta(page, limit, total) });
-    }
-    catch (err) {
-        res.status(500).json({ message: "Erreur agrégation", error: err });
     }
 });
-exports.aggregateMouvements = aggregateMouvements;
+exports.validateMouvementStock = validateMouvementStock;

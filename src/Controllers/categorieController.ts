@@ -14,11 +14,30 @@ export const getAllCategories = async (req: Request, res: Response) => {
   }
 };
 
-export const createCategorie = async (req: MulterRequest, res: Response) => {
-  try {
-    const { nom, type } = req.body;
-    let imagePath = "";
+// controllers/categories.controller.ts
 
+// Controllers/categorieController.ts
+export const createCategorie = async (req: any, res: Response) => {
+  try {
+    console.log("Content-Type:", req.headers["content-type"]);
+    console.log("Body keys:", Object.keys(req.body || {}));
+    console.log("Body:", req.body);
+    console.log(
+      "Has file?",
+      !!req.file,
+      req.file?.fieldname,
+      req.file?.mimetype,
+      req.file?.size,
+    );
+
+    const { nom, type } = req.body; // doivent exister ici
+
+    if (!nom || !type) {
+      res.status(400).json({ message: "Champs manquants", body: req.body });
+      return;
+    }
+
+    let imagePath = "";
     if (req.file) {
       imagePath = await uploadFile(req.file, "categorie");
     }
@@ -29,7 +48,9 @@ export const createCategorie = async (req: MulterRequest, res: Response) => {
     res.status(201).json(categorie);
   } catch (err) {
     console.error("Erreur création catégorie:", err);
-    res.status(400).json({ message: "Erreur lors de la création", error: err });
+    res
+      .status(400)
+      .json({ message: "Erreur lors de la création", error: String(err) });
   }
 };
 

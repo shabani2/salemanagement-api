@@ -88,6 +88,8 @@ export const generateStockPdf = async (req: Request, res: Response) => {
         .fontSize(8)
         .font("Helvetica")
         .text(`RCCM : ${organisation.rccm}`, 110, 46)
+        // .text(`ID NAT : ${organisation.idNat}`, 110, 46)
+        // .text(`NIF : ${organisation.numeroImpot}`, 110, 46)
         .text(`Contact : ${organisation.contact}`, 110, 60)
         .text(`Adresse : ${organisation.siegeSocial}`, 110, 74)
         .text(`Pays : ${organisation.pays}`, 110, 88);
@@ -99,8 +101,11 @@ export const generateStockPdf = async (req: Request, res: Response) => {
           .fillAndStroke("#f5f5f5", "#cccccc")
           .fillColor("#333")
           .fontSize(8)
-          .text(`idNat : ${organisation.idNat ?? "-"}`, 360, 28)
-          .text(`TVA : ${organisation.numeroImpot ?? "-"}`, 360, 42)
+
+          .text(`ID NAT : ${organisation.idNat ?? "-"}`, 110, 102)
+          .fontSize(8)
+
+          .text(`NIF : ${organisation.numeroImpot ?? "-"}`, 110, 112)
           .fillColor("black");
       }
     };

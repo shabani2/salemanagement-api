@@ -25,7 +25,7 @@ router.get(
   "/",
   authenticate,
   authorize(["SuperAdmin", "AdminRegion"]),
-  getAllRegions
+  getAllRegions,
 );
 
 // Recherche paginée (mêmes query params)
@@ -33,7 +33,7 @@ router.get(
   "/search",
   authenticate,
   authorize(["SuperAdmin", "AdminRegion"]),
-  searchRegions
+  searchRegions,
 );
 
 // Détail par ID (GET, pas DELETE)
@@ -41,7 +41,7 @@ router.get(
   "/:id",
   authenticate,
   authorize(["SuperAdmin", "AdminRegion"]),
-  getRegionById
+  getRegionById,
 );
 
 // Création
@@ -49,7 +49,7 @@ router.post(
   "/",
   authenticate,
   authorize(["SuperAdmin", "AdminRegion"]),
-  createRegion
+  createRegion,
 );
 
 // Mise à jour
@@ -57,7 +57,7 @@ router.put(
   "/:id",
   authenticate,
   authorize(["SuperAdmin", "AdminRegion"]),
-  updateRegion
+  updateRegion,
 );
 
 // Suppression
@@ -65,7 +65,7 @@ router.delete(
   "/:id",
   authenticate,
   authorize(["SuperAdmin", "AdminRegion"]),
-  deleteRegion
+  deleteRegion,
 );
 
 export default router;

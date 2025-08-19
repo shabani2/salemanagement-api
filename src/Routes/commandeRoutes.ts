@@ -15,7 +15,11 @@ const commandeRouter = express.Router();
 
 /** ⚠️ Ordre important: on met les “by-*” AVANT "/:id" */
 commandeRouter.get("/by-user/:userId", authenticate, getCommandesByUser);
-commandeRouter.get("/by-point-vente/:pointVenteId", authenticate, getCommandesByPointVente);
+commandeRouter.get(
+  "/by-point-vente/:pointVenteId",
+  authenticate,
+  getCommandesByPointVente,
+);
 commandeRouter.get("/by-region/:regionId", authenticate, getCommandesByRegion);
 
 /** Liste paginée/triée (q, page, limit, sortBy, order) */

@@ -22,9 +22,20 @@ const getAllCategories = (req, res) => __awaiter(void 0, void 0, void 0, functio
     }
 });
 exports.getAllCategories = getAllCategories;
+// controllers/categories.controller.ts
+// Controllers/categorieController.ts
 const createCategorie = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a, _b, _c;
     try {
-        const { nom, type } = req.body;
+        console.log("Content-Type:", req.headers["content-type"]);
+        console.log("Body keys:", Object.keys(req.body || {}));
+        console.log("Body:", req.body);
+        console.log("Has file?", !!req.file, (_a = req.file) === null || _a === void 0 ? void 0 : _a.fieldname, (_b = req.file) === null || _b === void 0 ? void 0 : _b.mimetype, (_c = req.file) === null || _c === void 0 ? void 0 : _c.size);
+        const { nom, type } = req.body; // doivent exister ici
+        if (!nom || !type) {
+            res.status(400).json({ message: "Champs manquants", body: req.body });
+            return;
+        }
         let imagePath = "";
         if (req.file) {
             imagePath = yield (0, uploadService_1.uploadFile)(req.file, "categorie");
@@ -35,7 +46,9 @@ const createCategorie = (req, res) => __awaiter(void 0, void 0, void 0, function
     }
     catch (err) {
         console.error("Erreur création catégorie:", err);
-        res.status(400).json({ message: "Erreur lors de la création", error: err });
+        res
+            .status(400)
+            .json({ message: "Erreur lors de la création", error: String(err) });
     }
 });
 exports.createCategorie = createCategorie;

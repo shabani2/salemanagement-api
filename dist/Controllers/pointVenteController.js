@@ -48,7 +48,14 @@ const buildSearchFilter = (req) => {
 };
 const paginationMeta = (page, limit, total) => {
     const totalPages = Math.max(1, Math.ceil(total / limit));
-    return { page, limit, total, totalPages, hasPrev: page > 1, hasNext: page < totalPages };
+    return {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasPrev: page > 1,
+        hasNext: page < totalPages,
+    };
 };
 /** -------------------- LISTE: pagination/tri/filtres -------------------- */
 const getAllPointVentes = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -104,7 +111,9 @@ const searchPointVentes = (req, res) => __awaiter(void 0, void 0, void 0, functi
         });
     }
     catch (err) {
-        res.status(500).json({ message: "Erreur lors de la recherche", error: err });
+        res
+            .status(500)
+            .json({ message: "Erreur lors de la recherche", error: err });
     }
 });
 exports.searchPointVentes = searchPointVentes;
@@ -237,7 +246,9 @@ const deletePointVente = (req, res) => __awaiter(void 0, void 0, void 0, functio
             if (r === "NOT_FOUND")
                 throw { status: 404, message: "Point de vente non trouvé" };
         }));
-        res.json({ message: "Point de vente supprimé avec succès (cascade en transaction)" });
+        res.json({
+            message: "Point de vente supprimé avec succès (cascade en transaction)",
+        });
     }
     catch (err) {
         // Fallback si standalone (code 20)
@@ -250,7 +261,9 @@ const deletePointVente = (req, res) => __awaiter(void 0, void 0, void 0, functio
                     res.status(404).json({ message: "Point de vente non trouvé" });
                     return;
                 }
-                res.json({ message: "Point de vente supprimé avec succès (cascade sans transaction)" });
+                res.json({
+                    message: "Point de vente supprimé avec succès (cascade sans transaction)",
+                });
                 return;
             }
             catch (e2) {

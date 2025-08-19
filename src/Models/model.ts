@@ -142,7 +142,7 @@ const MouvementStockSchema = new Schema<IMouvementStock>(
     produit: { type: Schema.Types.ObjectId, ref: "Produit", required: true },
     type: {
       type: String,
-      enum: ["Entrée", "Sortie", "Vente", "Livraison", "Commande"],
+      enum: ["Entrée", "Sortie", "Vente", "Livraison"],
       required: true,
     },
     quantite: { type: Number, required: true },
@@ -158,7 +158,7 @@ MouvementStockSchema.pre("save", async function (next) {
   try {
     const { type, statut, produit, quantite, pointVente, region } = this;
 
-    if (type === "Entrée" || type === "Commande") {
+    if (type === "Entrée") {
       return next();
     }
 

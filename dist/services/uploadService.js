@@ -31,7 +31,7 @@ if (process.env.NODE_ENV === "production" && process.env.GOOGLE_BUCKET_NAME) {
 const uploadFile = (file, directory) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         // 📦 Sauvegarde locale (Heroku inclus)
-        const uploadDir = path_1.default.join(__dirname, `../../assets/${directory}`);
+        const uploadDir = path_1.default.join(__dirname, `../assets/${directory}`);
         if (!fs_1.default.existsSync(uploadDir)) {
             fs_1.default.mkdirSync(uploadDir, { recursive: true });
         }

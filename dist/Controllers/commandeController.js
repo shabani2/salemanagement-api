@@ -67,7 +67,9 @@ const formatCommande = (commande) => __awaiter(void 0, void 0, void 0, function*
     });
     const totalLignes = commande.produits.length || 1;
     const tauxLivraisonLignes = Math.round((lignesLivrees / totalLignes) * 100);
-    const tauxLivraisonQuantite = quantiteTotale > 0 ? Math.round((quantiteLivree / quantiteTotale) * 100) : 0;
+    const tauxLivraisonQuantite = quantiteTotale > 0
+        ? Math.round((quantiteLivree / quantiteTotale) * 100)
+        : 0;
     return Object.assign(Object.assign({}, commande.toObject()), { montant, lignes: totalLignes, lignesLivrees,
         tauxLivraisonLignes,
         tauxLivraisonQuantite });
@@ -81,18 +83,25 @@ const getAllCommandes = (req, res) => __awaiter(void 0, void 0, void 0, function
         const where = {};
         if (q)
             where.numero = { $regex: q, $options: "i" };
-        if (req.query.user && mongoose_1.default.Types.ObjectId.isValid(String(req.query.user))) {
+        if (req.query.user &&
+            mongoose_1.default.Types.ObjectId.isValid(String(req.query.user))) {
             where.user = req.query.user;
         }
-        if (req.query.region && mongoose_1.default.Types.ObjectId.isValid(String(req.query.region))) {
+        if (req.query.region &&
+            mongoose_1.default.Types.ObjectId.isValid(String(req.query.region))) {
             where.region = req.query.region;
         }
-        if (req.query.pointVente && mongoose_1.default.Types.ObjectId.isValid(String(req.query.pointVente))) {
+        if (req.query.pointVente &&
+            mongoose_1.default.Types.ObjectId.isValid(String(req.query.pointVente))) {
             where.pointVente = req.query.pointVente;
         }
         const [total, rows] = yield Promise.all([
             model_1.Commande.countDocuments(where),
-            model_1.Commande.find(where).sort(sort).skip(skip).limit(limit).populate(commonPopulate),
+            model_1.Commande.find(where)
+                .sort(sort)
+                .skip(skip)
+                .limit(limit)
+                .populate(commonPopulate),
         ]);
         const commandes = yield Promise.all(rows.map(formatCommande));
         res.status(200).json({ total, page, limit, commandes });
@@ -116,7 +125,11 @@ const getCommandesByUser = (req, res) => __awaiter(void 0, void 0, void 0, funct
         const { skip, limit, sort, page } = getListOptions(req);
         const [total, rows] = yield Promise.all([
             model_1.Commande.countDocuments({ user: userId }),
-            model_1.Commande.find({ user: userId }).sort(sort).skip(skip).limit(limit).populate(commonPopulate),
+            model_1.Commande.find({ user: userId })
+                .sort(sort)
+                .skip(skip)
+                .limit(limit)
+                .populate(commonPopulate),
         ]);
         const commandes = yield Promise.all(rows.map(formatCommande));
         res.status(200).json({ total, page, limit, commandes });
@@ -169,11 +182,18 @@ const getCommandesByRegion = (req, res) => __awaiter(void 0, void 0, void 0, fun
         // Récupère les PV de la région pour une requête directe (au lieu de filtrer en JS)
         const pvIds = yield model_1.PointVente.find({ region: regionId }).distinct("_id");
         const where = {
-            $or: [{ region: new mongoose_1.default.Types.ObjectId(regionId) }, { pointVente: { $in: pvIds } }],
+            $or: [
+                { region: new mongoose_1.default.Types.ObjectId(regionId) },
+                { pointVente: { $in: pvIds } },
+            ],
         };
         const [total, rows] = yield Promise.all([
             model_1.Commande.countDocuments(where),
-            model_1.Commande.find(where).sort(sort).skip(skip).limit(limit).populate(commonPopulate),
+            model_1.Commande.find(where)
+                .sort(sort)
+                .skip(skip)
+                .limit(limit)
+                .populate(commonPopulate),
         ]);
         const commandes = yield Promise.all(rows.map(formatCommande));
         res.status(200).json({ total, page, limit, commandes });
@@ -215,14 +235,18 @@ const createCommande = (req, res) => __awaiter(void 0, void 0, void 0, function*
     try {
         const { user, region, pointVente, depotCentral, produits } = req.body;
         if (!user || !Array.isArray(produits) || produits.length === 0) {
-            res.status(400).json({ message: "L'utilisateur et les produits sont requis." });
+            res
+                .status(400)
+                .json({ message: "L'utilisateur et les produits sont requis." });
             return;
         }
         const hasPointVente = !!pointVente;
         const hasRegion = !!region;
         const hasDepotCentral = depotCentral === true;
         if (!hasPointVente && !hasRegion && !hasDepotCentral) {
-            res.status(400).json({ message: "La commande doit être liée à une localisation." });
+            res
+                .status(400)
+                .json({ message: "La commande doit être liée à une localisation." });
             return;
         }
         const numero = `CMD-${Date.now()}`;
@@ -274,7 +298,9 @@ const updateCommande = (req, res) => __awaiter(void 0, void 0, void 0, function*
         }
         const _f = req.body, { produits: produitsUpdates } = _f, updateData = __rest(_f, ["produits"]);
         // 1) Mise à jour de la commande (hors produits)
-        const commande = yield model_1.Commande.findByIdAndUpdate(id, updateData, { new: true });
+        const commande = yield model_1.Commande.findByIdAndUpdate(id, updateData, {
+            new: true,
+        });
         if (!commande) {
             res.status(404).json({ message: "Commande non trouvée." });
             return;
@@ -308,7 +334,8 @@ const updateCommande = (req, res) => __awaiter(void 0, void 0, void 0, function*
                                 depotCentral: !!((_a = updateData.depotCentral) !== null && _a !== void 0 ? _a : commande.depotCentral),
                             };
                             if ((_b = updateData.pointVente) !== null && _b !== void 0 ? _b : commande.pointVente) {
-                                mouvementData.pointVente = (_c = updateData.pointVente) !== null && _c !== void 0 ? _c : commande.pointVente;
+                                mouvementData.pointVente =
+                                    (_c = updateData.pointVente) !== null && _c !== void 0 ? _c : commande.pointVente;
                             }
                             if ((_d = updateData.region) !== null && _d !== void 0 ? _d : commande.region) {
                                 mouvementData.region = (_e = updateData.region) !== null && _e !== void 0 ? _e : commande.region;

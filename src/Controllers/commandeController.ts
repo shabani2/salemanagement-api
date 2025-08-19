@@ -1,7 +1,12 @@
 // controllers/commandeController.ts
 import { Request, Response } from "express";
 import mongoose from "mongoose";
-import { Commande, CommandeProduit, MouvementStock, PointVente } from "../Models/model";
+import {
+  Commande,
+  CommandeProduit,
+  MouvementStock,
+  PointVente,
+} from "../Models/model";
 
 /* --------------------------- Utils pagination/sort -------------------------- */
 const getListOptions = (req: Request) => {
@@ -12,7 +17,8 @@ const getListOptions = (req: Request) => {
   );
   const skip = (page - 1) * limit;
   const sortBy = String(req.query.sortBy || "createdAt");
-  const order = String(req.query.order || "desc").toLowerCase() === "asc" ? 1 : -1;
+  const order =
+    String(req.query.order || "desc").toLowerCase() === "asc" ? 1 : -1;
   const sort = { [sortBy]: order as 1 | -1 };
   return { page, limit, skip, sort };
 };
@@ -53,7 +59,9 @@ const formatCommande = async (commande: any) => {
   const totalLignes = commande.produits.length || 1;
   const tauxLivraisonLignes = Math.round((lignesLivrees / totalLignes) * 100);
   const tauxLivraisonQuantite =
-    quantiteTotale > 0 ? Math.round((quantiteLivree / quantiteTotale) * 100) : 0;
+    quantiteTotale > 0
+      ? Math.round((quantiteLivree / quantiteTotale) * 100)
+      : 0;
 
   return {
     ...commande.toObject(),
@@ -74,19 +82,32 @@ export const getAllCommandes = async (req: Request, res: Response) => {
     const q = String(req.query.q || "").trim();
     const where: Record<string, any> = {};
     if (q) where.numero = { $regex: q, $options: "i" };
-    if (req.query.user && mongoose.Types.ObjectId.isValid(String(req.query.user))) {
+    if (
+      req.query.user &&
+      mongoose.Types.ObjectId.isValid(String(req.query.user))
+    ) {
       where.user = req.query.user;
     }
-    if (req.query.region && mongoose.Types.ObjectId.isValid(String(req.query.region))) {
+    if (
+      req.query.region &&
+      mongoose.Types.ObjectId.isValid(String(req.query.region))
+    ) {
       where.region = req.query.region;
     }
-    if (req.query.pointVente && mongoose.Types.ObjectId.isValid(String(req.query.pointVente))) {
+    if (
+      req.query.pointVente &&
+      mongoose.Types.ObjectId.isValid(String(req.query.pointVente))
+    ) {
       where.pointVente = req.query.pointVente;
     }
 
     const [total, rows] = await Promise.all([
       Commande.countDocuments(where),
-      Commande.find(where).sort(sort).skip(skip).limit(limit).populate(commonPopulate),
+      Commande.find(where)
+        .sort(sort)
+        .skip(skip)
+        .limit(limit)
+        .populate(commonPopulate),
     ]);
 
     const commandes = await Promise.all(rows.map(formatCommande));
@@ -111,7 +132,11 @@ export const getCommandesByUser = async (req: Request, res: Response) => {
     const { skip, limit, sort, page } = getListOptions(req);
     const [total, rows] = await Promise.all([
       Commande.countDocuments({ user: userId }),
-      Commande.find({ user: userId }).sort(sort).skip(skip).limit(limit).populate(commonPopulate),
+      Commande.find({ user: userId })
+        .sort(sort)
+        .skip(skip)
+        .limit(limit)
+        .populate(commonPopulate),
     ]);
 
     const commandes = await Promise.all(rows.map(formatCommande));
@@ -147,7 +172,8 @@ export const getCommandesByPointVente = async (req: Request, res: Response) => {
     res.status(200).json({ total, page, limit, commandes });
   } catch (error) {
     res.status(400).json({
-      message: "Erreur lors de la récupération des commandes par point de vente.",
+      message:
+        "Erreur lors de la récupération des commandes par point de vente.",
       error: (error as Error).message,
     });
   }
@@ -168,12 +194,19 @@ export const getCommandesByRegion = async (req: Request, res: Response) => {
     const pvIds = await PointVente.find({ region: regionId }).distinct("_id");
 
     const where = {
-      $or: [{ region: new mongoose.Types.ObjectId(regionId) }, { pointVente: { $in: pvIds } }],
+      $or: [
+        { region: new mongoose.Types.ObjectId(regionId) },
+        { pointVente: { $in: pvIds } },
+      ],
     };
 
     const [total, rows] = await Promise.all([
       Commande.countDocuments(where),
-      Commande.find(where).sort(sort).skip(skip).limit(limit).populate(commonPopulate),
+      Commande.find(where)
+        .sort(sort)
+        .skip(skip)
+        .limit(limit)
+        .populate(commonPopulate),
     ]);
 
     const commandes = await Promise.all(rows.map(formatCommande));
@@ -217,7 +250,9 @@ export const createCommande = async (req: Request, res: Response) => {
     const { user, region, pointVente, depotCentral, produits } = req.body;
 
     if (!user || !Array.isArray(produits) || produits.length === 0) {
-      res.status(400).json({ message: "L'utilisateur et les produits sont requis." });
+      res
+        .status(400)
+        .json({ message: "L'utilisateur et les produits sont requis." });
       return;
     }
 
@@ -225,7 +260,9 @@ export const createCommande = async (req: Request, res: Response) => {
     const hasRegion = !!region;
     const hasDepotCentral = depotCentral === true;
     if (!hasPointVente && !hasRegion && !hasDepotCentral) {
-      res.status(400).json({ message: "La commande doit être liée à une localisation." });
+      res
+        .status(400)
+        .json({ message: "La commande doit être liée à une localisation." });
       return;
     }
 
@@ -284,7 +321,9 @@ export const updateCommande = async (req: Request, res: Response) => {
     const { produits: produitsUpdates, ...updateData } = req.body;
 
     // 1) Mise à jour de la commande (hors produits)
-    const commande = await Commande.findByIdAndUpdate(id, updateData, { new: true });
+    const commande = await Commande.findByIdAndUpdate(id, updateData, {
+      new: true,
+    });
     if (!commande) {
       res.status(404).json({ message: "Commande non trouvée." });
       return;
@@ -294,7 +333,8 @@ export const updateCommande = async (req: Request, res: Response) => {
     if (Array.isArray(produitsUpdates) && produitsUpdates.length > 0) {
       for (const prodUpdate of produitsUpdates) {
         const { _id: ligneId, statut, quantite, montant, ...rest } = prodUpdate;
-        if (!ligneId || !mongoose.Types.ObjectId.isValid(String(ligneId))) continue;
+        if (!ligneId || !mongoose.Types.ObjectId.isValid(String(ligneId)))
+          continue;
 
         const ligne = await CommandeProduit.findById(ligneId);
         if (!ligne) continue;
@@ -310,16 +350,20 @@ export const updateCommande = async (req: Request, res: Response) => {
               // Création du mouvement stock lié
               const mouvementData: any = {
                 produit: ligne.produit,
-                quantite: typeof quantite === "number" ? quantite : ligne.quantite,
+                quantite:
+                  typeof quantite === "number" ? quantite : ligne.quantite,
                 montant: typeof montant === "number" ? montant : 0,
                 type: "Livraison",
                 statut: true,
                 user: updateData.user || commande.user, // fallback user de la commande
                 commandeId: commande._id,
-                depotCentral: !!(updateData.depotCentral ?? commande.depotCentral),
+                depotCentral: !!(
+                  updateData.depotCentral ?? commande.depotCentral
+                ),
               };
               if (updateData.pointVente ?? commande.pointVente) {
-                mouvementData.pointVente = updateData.pointVente ?? commande.pointVente;
+                mouvementData.pointVente =
+                  updateData.pointVente ?? commande.pointVente;
               }
               if (updateData.region ?? commande.region) {
                 mouvementData.region = updateData.region ?? commande.region;
@@ -343,7 +387,8 @@ export const updateCommande = async (req: Request, res: Response) => {
 
     // 3) Rechargement des lignes pour calcul statut global
     const lignesCmd = await CommandeProduit.find({ commandeId: commande._id });
-    const tousLivres = lignesCmd.length > 0 && lignesCmd.every((l) => l.statut === "livré");
+    const tousLivres =
+      lignesCmd.length > 0 && lignesCmd.every((l) => l.statut === "livré");
     if (tousLivres && commande.statut !== "livrée") {
       commande.statut = "livrée";
       await commande.save();

@@ -48,7 +48,14 @@ const buildSearchFilter = (req) => {
 };
 const paginationMeta = (page, limit, total) => {
     const totalPages = Math.max(1, Math.ceil(total / limit));
-    return { page, limit, total, totalPages, hasPrev: page > 1, hasNext: page < totalPages };
+    return {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasPrev: page > 1,
+        hasNext: page < totalPages,
+    };
 };
 /** -------------------- LISTE avec pagination/tri/filtres -------------------- */
 const getAllRegions = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -121,7 +128,9 @@ const searchRegions = (req, res) => __awaiter(void 0, void 0, void 0, function* 
         });
     }
     catch (err) {
-        res.status(500).json({ message: "Erreur lors de la recherche", error: err });
+        res
+            .status(500)
+            .json({ message: "Erreur lors de la recherche", error: err });
     }
 });
 exports.searchRegions = searchRegions;
@@ -189,7 +198,12 @@ const updateRegion = (req, res) => __awaiter(void 0, void 0, void 0, function* (
         res.json(updated);
     }
     catch (err) {
-        res.status(400).json({ message: "Erreur lors de la mise à jour", error: (_a = err === null || err === void 0 ? void 0 : err.message) !== null && _a !== void 0 ? _a : err });
+        res
+            .status(400)
+            .json({
+            message: "Erreur lors de la mise à jour",
+            error: (_a = err === null || err === void 0 ? void 0 : err.message) !== null && _a !== void 0 ? _a : err,
+        });
     }
 });
 exports.updateRegion = updateRegion;
@@ -197,7 +211,9 @@ exports.updateRegion = updateRegion;
 function cascadeDeleteRegion(regionId, session) {
     return __awaiter(this, void 0, void 0, function* () {
         // Vérifie existence
-        const exists = yield (session ? model_1.Region.findById(regionId).session(session) : model_1.Region.findById(regionId));
+        const exists = yield (session
+            ? model_1.Region.findById(regionId).session(session)
+            : model_1.Region.findById(regionId));
         if (!exists)
             return "NOT_FOUND";
         // Récupère les points de vente de la région
@@ -240,7 +256,9 @@ const deleteRegion = (req, res) => __awaiter(void 0, void 0, void 0, function* (
             if (r === "NOT_FOUND")
                 throw { status: 404, message: "Région non trouvée" };
         }));
-        res.json({ message: "Région supprimée avec succès (cascade en transaction)" });
+        res.json({
+            message: "Région supprimée avec succès (cascade en transaction)",
+        });
     }
     catch (err) {
         // Fallback si standalone (code 20)
@@ -253,7 +271,9 @@ const deleteRegion = (req, res) => __awaiter(void 0, void 0, void 0, function* (
                     res.status(404).json({ message: "Région non trouvée" });
                     return;
                 }
-                res.json({ message: "Région supprimée avec succès (cascade sans transaction)" });
+                res.json({
+                    message: "Région supprimée avec succès (cascade sans transaction)",
+                });
                 return;
             }
             catch (e2) {

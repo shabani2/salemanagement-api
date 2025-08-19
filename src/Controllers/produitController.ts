@@ -5,7 +5,6 @@ import { CommandeProduit, MouvementStock, Produit } from "../Models/model";
 
 // 👉 Si tes modèles sont dans d'autres fichiers, ajuste ces imports :
 
-
 /** Utilitaires */
 const parsePagination = (req: Request) => {
   const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10) || 1);
@@ -17,7 +16,8 @@ const parsePagination = (req: Request) => {
 
   // Tri simple: ?sortBy=createdAt&order=desc  (order: asc|desc)
   const sortBy = (req.query.sortBy as string) || "createdAt";
-  const order = ((req.query.order as string) || "desc").toLowerCase() === "asc" ? 1 : -1;
+  const order =
+    ((req.query.order as string) || "desc").toLowerCase() === "asc" ? 1 : -1;
   const sort = { [sortBy]: order as 1 | -1 };
 
   return { page, limit, skip, sort };
@@ -111,12 +111,17 @@ export const searchProduit = async (req: Request, res: Response) => {
       meta: includeTotal ? paginationMeta(page, limit, total) : undefined,
     });
   } catch (err) {
-    res.status(500).json({ message: "Erreur lors de la recherche", error: err });
+    res
+      .status(500)
+      .json({ message: "Erreur lors de la recherche", error: err });
   }
 };
 
 // 🔹 Obtenir un produit par ID
-export const getProduitById = async (req: Request, res: Response): Promise<void> => {
+export const getProduitById = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
   try {
     const { id } = req.params;
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -173,7 +178,10 @@ export const createProduit = async (req: Request, res: Response) => {
 };
 
 // 🔹 Mettre à jour un produit
-export const updateProduit = async (req: Request, res: Response): Promise<void> => {
+export const updateProduit = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
   try {
     const { id } = req.params;
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -224,11 +232,11 @@ async function cascadeDeleteProduit(id: string, session?: ClientSession) {
   //    Ajuste les noms de modèles/champs selon tes schémas
   await CommandeProduit?.deleteMany(
     { $or: [{ produit: id }, { produitId: id }] },
-    { session }
+    { session },
   ).catch(() => Promise.resolve());
 
   await MouvementStock?.deleteMany({ produit: id }, { session }).catch(() =>
-    Promise.resolve()
+    Promise.resolve(),
   );
 
   // 3) Supprimer le produit
@@ -255,10 +263,13 @@ export const deleteProduit = async (req: Request, res: Response) => {
     // --- 1) Essai avec transaction (si replica set/mongos présent) ---
     await session.withTransaction(async () => {
       const r = await cascadeDeleteProduit(id, session);
-      if (r === "NOT_FOUND") throw { status: 404, message: "Produit non trouvé" };
+      if (r === "NOT_FOUND")
+        throw { status: 404, message: "Produit non trouvé" };
     });
 
-    res.json({ message: "Produit supprimé avec succès (cascade en transaction)" });
+    res.json({
+      message: "Produit supprimé avec succès (cascade en transaction)",
+    });
   } catch (err: any) {
     // --- 2) Fallback si transactions non supportées ---
     const isNoTxn =
@@ -272,7 +283,9 @@ export const deleteProduit = async (req: Request, res: Response) => {
           res.status(404).json({ message: "Produit non trouvé" });
           return;
         }
-        res.json({ message: "Produit supprimé avec succès (cascade sans transaction)" });
+        res.json({
+          message: "Produit supprimé avec succès (cascade sans transaction)",
+        });
         return;
       } catch (e2: any) {
         res.status(500).json({

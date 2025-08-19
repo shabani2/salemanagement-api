@@ -150,7 +150,7 @@ const MouvementStockSchema = new mongoose_1.Schema({
     produit: { type: mongoose_1.Schema.Types.ObjectId, ref: "Produit", required: true },
     type: {
         type: String,
-        enum: ["Entrée", "Sortie", "Vente", "Livraison", "Commande"],
+        enum: ["Entrée", "Sortie", "Vente", "Livraison"],
         required: true,
     },
     quantite: { type: Number, required: true },
@@ -162,7 +162,7 @@ MouvementStockSchema.pre("save", function (next) {
     return __awaiter(this, void 0, void 0, function* () {
         try {
             const { type, statut, produit, quantite, pointVente, region } = this;
-            if (type === "Entrée" || type === "Commande") {
+            if (type === "Entrée") {
                 return next();
             }
             if (type === "Livraison") {

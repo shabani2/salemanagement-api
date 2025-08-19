@@ -3,16 +3,18 @@ import { Request, Response } from "express";
 import mongoose, { ClientSession } from "mongoose";
 import { MouvementStock, PointVente, Region } from "../Models/model";
 
-
-
 /** -------------------- Utils pagination/tri/filtre -------------------- */
 const parsePagination = (req: Request) => {
   const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10) || 1);
-  const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? "10"), 10) || 10));
+  const limit = Math.min(
+    100,
+    Math.max(1, parseInt(String(req.query.limit ?? "10"), 10) || 10),
+  );
   const skip = (page - 1) * limit;
 
   const sortBy = (req.query.sortBy as string) || "createdAt"; // "nom" | "ville" | "pointVenteCount" | ...
-  const order = ((req.query.order as string) || "desc").toLowerCase() === "asc" ? 1 : -1;
+  const order =
+    ((req.query.order as string) || "desc").toLowerCase() === "asc" ? 1 : -1;
   const sort = { [sortBy]: order as 1 | -1 };
 
   return { page, limit, skip, sort };
@@ -43,7 +45,14 @@ const buildSearchFilter = (req: Request) => {
 
 const paginationMeta = (page: number, limit: number, total: number) => {
   const totalPages = Math.max(1, Math.ceil(total / limit));
-  return { page, limit, total, totalPages, hasPrev: page > 1, hasNext: page < totalPages };
+  return {
+    page,
+    limit,
+    total,
+    totalPages,
+    hasPrev: page > 1,
+    hasNext: page < totalPages,
+  };
 };
 
 /** -------------------- LISTE avec pagination/tri/filtres -------------------- */
@@ -58,7 +67,7 @@ export const getAllRegions = async (req: Request, res: Response) => {
       { $match: filter },
       {
         $lookup: {
-          from: "pointventes",           // ⚠️ nom de collection (minuscule/pluriel Mongo)
+          from: "pointventes", // ⚠️ nom de collection (minuscule/pluriel Mongo)
           localField: "_id",
           foreignField: "region",
           as: "pointsVente",
@@ -119,7 +128,9 @@ export const searchRegions = async (req: Request, res: Response) => {
       meta: includeTotal ? paginationMeta(page, limit, total) : undefined,
     });
   } catch (err) {
-    res.status(500).json({ message: "Erreur lors de la recherche", error: err });
+    res
+      .status(500)
+      .json({ message: "Erreur lors de la recherche", error: err });
   }
 };
 
@@ -192,7 +203,12 @@ export const updateRegion = async (req: Request, res: Response) => {
 
     res.json(updated);
   } catch (err: any) {
-    res.status(400).json({ message: "Erreur lors de la mise à jour", error: err?.message ?? err });
+    res
+      .status(400)
+      .json({
+        message: "Erreur lors de la mise à jour",
+        error: err?.message ?? err,
+      });
   }
 };
 
@@ -200,14 +216,16 @@ export const updateRegion = async (req: Request, res: Response) => {
 
 async function cascadeDeleteRegion(regionId: string, session?: ClientSession) {
   // Vérifie existence
-  const exists = await (session ? Region.findById(regionId).session(session) : Region.findById(regionId));
+  const exists = await (session
+    ? Region.findById(regionId).session(session)
+    : Region.findById(regionId));
   if (!exists) return "NOT_FOUND" as const;
 
   // Récupère les points de vente de la région
   const pvs = await (session
     ? PointVente.find({ region: regionId }).select("_id").session(session)
     : PointVente.find({ region: regionId }).select("_id"));
-  const pvIds = pvs.map((p: { _id: any; }) => p._id);
+  const pvIds = pvs.map((p: { _id: any }) => p._id);
 
   // Supprime dépendances liées aux PV (ajuste les champs selon tes schémas)
   const pvOrs = [
@@ -217,12 +235,14 @@ async function cascadeDeleteRegion(regionId: string, session?: ClientSession) {
     { pos: { $in: pvIds } },
   ];
 
- 
- 
-  await MouvementStock?.deleteMany({ $or: pvOrs }, { session }).catch(() => Promise.resolve());
+  await MouvementStock?.deleteMany({ $or: pvOrs }, { session }).catch(() =>
+    Promise.resolve(),
+  );
 
   // Supprime les points de vente
-  await PointVente?.deleteMany({ region: regionId }, { session }).catch(() => Promise.resolve());
+  await PointVente?.deleteMany({ region: regionId }, { session }).catch(() =>
+    Promise.resolve(),
+  );
 
   // Supprime la région
   if (session) {
@@ -248,10 +268,13 @@ export const deleteRegion = async (req: Request, res: Response) => {
     // Essai en transaction (si replica set actif)
     await session.withTransaction(async () => {
       const r = await cascadeDeleteRegion(id, session);
-      if (r === "NOT_FOUND") throw { status: 404, message: "Région non trouvée" };
+      if (r === "NOT_FOUND")
+        throw { status: 404, message: "Région non trouvée" };
     });
 
-    res.json({ message: "Région supprimée avec succès (cascade en transaction)" });
+    res.json({
+      message: "Région supprimée avec succès (cascade en transaction)",
+    });
   } catch (err: any) {
     // Fallback si standalone (code 20)
     const isNoTxn =
@@ -265,7 +288,9 @@ export const deleteRegion = async (req: Request, res: Response) => {
           res.status(404).json({ message: "Région non trouvée" });
           return;
         }
-        res.json({ message: "Région supprimée avec succès (cascade sans transaction)" });
+        res.json({
+          message: "Région supprimée avec succès (cascade sans transaction)",
+        });
         return;
       } catch (e2: any) {
         res.status(500).json({

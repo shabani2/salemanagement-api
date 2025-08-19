@@ -258,7 +258,7 @@ export const deleteCommande = async (req: Request, res: Response) => {
 // PUT /commande-produits/:id
 export const updateCommandeProduit = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   const { id } = req.params;
   const { produit, quantite, statut, mouvementStockId } = req.body;
@@ -277,7 +277,7 @@ export const updateCommandeProduit = async (
         ...(statut && { statut }),
         ...(mouvementStockId !== undefined && { mouvementStockId }),
       },
-      { new: true }
+      { new: true },
     );
 
     if (!updated) {

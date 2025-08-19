@@ -25,7 +25,7 @@ router.get(
   "/",
   authenticate,
   authorize(["SuperAdmin", "AdminRegion"]),
-  getAllPointVentes
+  getAllPointVentes,
 );
 
 // Recherche paginée (mêmes query params)
@@ -33,7 +33,7 @@ router.get(
   "/search",
   authenticate,
   authorize(["SuperAdmin", "AdminRegion"]),
-  searchPointVentes
+  searchPointVentes,
 );
 
 // Listing par région (compat + même pagination/tri via querystring)
@@ -41,7 +41,7 @@ router.get(
   "/by-region/:regionId",
   authenticate,
   authorize(["SuperAdmin", "AdminRegion"]),
-  getPointVentesByRegion
+  getPointVentesByRegion,
 );
 
 // Détail
@@ -49,7 +49,7 @@ router.get(
   "/:id",
   authenticate,
   authorize(["SuperAdmin", "AdminRegion"]),
-  getPointVenteById
+  getPointVenteById,
 );
 
 // Création
@@ -57,7 +57,7 @@ router.post(
   "/",
   authenticate,
   authorize(["SuperAdmin", "AdminRegion"]),
-  createPointVente
+  createPointVente,
 );
 
 // Mise à jour
@@ -65,7 +65,7 @@ router.put(
   "/:id",
   authenticate,
   authorize(["SuperAdmin", "AdminRegion"]),
-  updatePointVente
+  updatePointVente,
 );
 
 // Suppression (cascade + fallback gérés côté controller)
@@ -73,7 +73,7 @@ router.delete(
   "/:id",
   authenticate,
   authorize(["SuperAdmin", "AdminRegion"]),
-  deletePointVente
+  deletePointVente,
 );
 
 export default router;

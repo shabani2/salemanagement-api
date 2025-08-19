@@ -3,16 +3,18 @@ import { Request, Response } from "express";
 import mongoose, { ClientSession } from "mongoose";
 import { MouvementStock, PointVente, Produit } from "../Models/model";
 
-
-
 /** -------------------- Utils pagination/tri/filtre -------------------- */
 const parsePagination = (req: Request) => {
   const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10) || 1);
-  const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? "10"), 10) || 10));
+  const limit = Math.min(
+    100,
+    Math.max(1, parseInt(String(req.query.limit ?? "10"), 10) || 10),
+  );
   const skip = (page - 1) * limit;
 
   const sortBy = (req.query.sortBy as string) || "createdAt"; // "nom" | "createdAt" | ...
-  const order = ((req.query.order as string) || "desc").toLowerCase() === "asc" ? 1 : -1;
+  const order =
+    ((req.query.order as string) || "desc").toLowerCase() === "asc" ? 1 : -1;
   const sort = { [sortBy]: order as 1 | -1 };
 
   return { page, limit, skip, sort };
@@ -43,7 +45,14 @@ const buildSearchFilter = (req: Request) => {
 
 const paginationMeta = (page: number, limit: number, total: number) => {
   const totalPages = Math.max(1, Math.ceil(total / limit));
-  return { page, limit, total, totalPages, hasPrev: page > 1, hasNext: page < totalPages };
+  return {
+    page,
+    limit,
+    total,
+    totalPages,
+    hasPrev: page > 1,
+    hasNext: page < totalPages,
+  };
 };
 
 /** -------------------- LISTE: pagination/tri/filtres -------------------- */
@@ -102,7 +111,9 @@ export const searchPointVentes = async (req: Request, res: Response) => {
       meta: includeTotal ? paginationMeta(page, limit, total) : undefined,
     });
   } catch (err) {
-    res.status(500).json({ message: "Erreur lors de la recherche", error: err });
+    res
+      .status(500)
+      .json({ message: "Erreur lors de la recherche", error: err });
   }
 };
 
@@ -176,10 +187,14 @@ export const updatePointVente = async (req: Request, res: Response) => {
 
     const updateData = req.body;
 
-    const updatedPointVente = await PointVente.findByIdAndUpdate(id, updateData, {
-      new: true,
-      runValidators: true,
-    })
+    const updatedPointVente = await PointVente.findByIdAndUpdate(
+      id,
+      updateData,
+      {
+        new: true,
+        runValidators: true,
+      },
+    )
       .populate("region")
       .populate("stock.produit");
 
@@ -196,7 +211,10 @@ export const updatePointVente = async (req: Request, res: Response) => {
 
 /** -------------------- SUPPRESSION (cascade + fallback sans transaction) -------------------- */
 
-async function cascadeDeletePointVente(pointVenteId: string, session?: ClientSession) {
+async function cascadeDeletePointVente(
+  pointVenteId: string,
+  session?: ClientSession,
+) {
   // 1) Vérifier existence
   const exists = await (session
     ? PointVente.findById(pointVenteId).session(session)
@@ -205,7 +223,9 @@ async function cascadeDeletePointVente(pointVenteId: string, session?: ClientSes
 
   // 2) Supprimer dépendances
   // - Produits rattachés à ce PV (si ton schéma Produit a un champ pointVente)
-  await Produit?.deleteMany({ pointVente: pointVenteId }, { session }).catch(() => Promise.resolve());
+  await Produit?.deleteMany({ pointVente: pointVenteId }, { session }).catch(
+    () => Promise.resolve(),
+  );
 
   // - Ventes / Livraisons / Mouvements liés à ce PV (ajuste les noms de champs selon tes schémas)
   const pvMatch = [
@@ -215,8 +235,9 @@ async function cascadeDeletePointVente(pointVenteId: string, session?: ClientSes
     { pos: pointVenteId },
   ];
 
- 
-  await MouvementStock?.deleteMany({ $or: pvMatch }, { session }).catch(() => Promise.resolve());
+  await MouvementStock?.deleteMany({ $or: pvMatch }, { session }).catch(() =>
+    Promise.resolve(),
+  );
 
   // 3) Supprimer le point de vente
   if (session) {
@@ -242,10 +263,13 @@ export const deletePointVente = async (req: Request, res: Response) => {
     // Essai en transaction (si replica set actif)
     await session.withTransaction(async () => {
       const r = await cascadeDeletePointVente(id, session);
-      if (r === "NOT_FOUND") throw { status: 404, message: "Point de vente non trouvé" };
+      if (r === "NOT_FOUND")
+        throw { status: 404, message: "Point de vente non trouvé" };
     });
 
-    res.json({ message: "Point de vente supprimé avec succès (cascade en transaction)" });
+    res.json({
+      message: "Point de vente supprimé avec succès (cascade en transaction)",
+    });
   } catch (err: any) {
     // Fallback si standalone (code 20)
     const isNoTxn =
@@ -259,7 +283,10 @@ export const deletePointVente = async (req: Request, res: Response) => {
           res.status(404).json({ message: "Point de vente non trouvé" });
           return;
         }
-        res.json({ message: "Point de vente supprimé avec succès (cascade sans transaction)" });
+        res.json({
+          message:
+            "Point de vente supprimé avec succès (cascade sans transaction)",
+        });
         return;
       } catch (e2: any) {
         res.status(500).json({
