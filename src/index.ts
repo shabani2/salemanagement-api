@@ -90,10 +90,10 @@ app.use("/categories", categorieRoutes);
 app.use("/produits", produitRoutes);
 
 app.use("/organisations", organisationRoutes);
-app.use("/region", regionRoutes);
-app.use("/point-ventes", pointVenteRoutes);
-app.use("/mouvementStock", mouvementStockRoute);
-app.use("/stock", stockRouter);
+app.use("/regions", regionRoutes);
+app.use("/pointventes", pointVenteRoutes);
+app.use("/mouvements", mouvementStockRoute);
+app.use("/stocks", stockRouter);
 app.use("/generatePdf", pdfRouter);
 
 // Finance routes

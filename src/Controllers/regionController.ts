@@ -31,6 +31,7 @@ export const getAllRegions = async (req: Request, res: Response) => {
           nom: 1,
           ville: 1,
           pointVenteCount: 1,
+          createdAt: 1, // ➕ on ajoute la date de création
         },
       },
     ]);
