@@ -9,6 +9,7 @@ import {
   createCommande,
   updateCommande,
   deleteCommande,
+  printCommande,
 } from "../Controllers/commandeController";
 
 const commandeRouter = express.Router();
@@ -26,5 +27,6 @@ commandeRouter.get("/by-region/:regionId", authenticate, getCommandesByRegion);
 commandeRouter.post("/", authenticate, createCommande);
 commandeRouter.put("/:id", authenticate, updateCommande);
 commandeRouter.delete("/:id", authenticate, deleteCommande);
+commandeRouter.get("/:id/print", printCommande);
 
 export default commandeRouter;

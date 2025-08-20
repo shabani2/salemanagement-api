@@ -103,10 +103,10 @@ export const register = async (
     console.error("Erreur d'upload complète:", uploadError);
     res.status(500).json({
       message: "Échec de l'upload de l'image",
-      error: uploadError instanceof Error ? uploadError.message : uploadError
-    })
-  };
-}
+      error: uploadError instanceof Error ? uploadError.message : uploadError,
+    });
+  }
+};
 
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {

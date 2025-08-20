@@ -4,10 +4,6 @@ import { Storage } from "@google-cloud/storage";
 import { MulterFile } from "../Models/multerType";
 import { getGoogleCredentialsFile } from "../Utils/getGcpCredentials";
 
-
-
-
-
 // Instance unique de GCS
 let storage: Storage;
 if (process.env.NODE_ENV === "production" && process.env.GOOGLE_BUCKET_NAME) {
@@ -20,7 +16,7 @@ if (process.env.NODE_ENV === "production" && process.env.GOOGLE_BUCKET_NAME) {
 }
 export const uploadFile = async (
   file: MulterFile,
-  directory: string
+  directory: string,
 ): Promise<string> => {
   try {
     // 📦 Sauvegarde locale (Heroku inclus)
@@ -67,7 +63,7 @@ export const deleteFile = async (filePath: string): Promise<void> => {
       const bucketName = process.env.GOOGLE_BUCKET_NAME;
       const fileName = filePath.replace(
         `https://storage.googleapis.com/${bucketName}/`,
-        ""
+        "",
       );
 
       await storage.bucket(bucketName).file(fileName).delete();
@@ -76,9 +72,3 @@ export const deleteFile = async (filePath: string): Promise<void> => {
     console.error("Erreur lors de la suppression du fichier:", err);
   }
 };
-
-
-
-
-
-

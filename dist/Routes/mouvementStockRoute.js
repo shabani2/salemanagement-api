@@ -1,23 +1,73 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
+var __importDefault =
+  (this && this.__importDefault) ||
+  function (mod) {
+    return mod && mod.__esModule ? mod : { default: mod };
+  };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const mouvementStockController_1 = require("../Controllers/mouvementStockController");
 const auth_1 = require("../Middlewares/auth");
 const mouvementStockController_2 = require("../Controllers/mouvementStockController");
 const mvtStockrouter = express_1.default.Router();
-mvtStockrouter.get("/", auth_1.authenticate, mouvementStockController_1.getAllMouvementsStock);
-mvtStockrouter.get("/:id", auth_1.authenticate, mouvementStockController_1.getMouvementStockById);
-mvtStockrouter.get("/by-point-vente/:pointVenteId", auth_1.authenticate, mouvementStockController_1.getMouvementsStockByPointVente);
-mvtStockrouter.get("/by-point-vente/page/:pointVenteId", auth_1.authenticate, mouvementStockController_1.getMouvementsStockByPointVenteId);
-mvtStockrouter.get("/by-point-vente/aggregate/:pointVenteId", auth_1.authenticate, mouvementStockController_1.getMouvementsStockAggregatedByPointVente);
-mvtStockrouter.get("/byUser/:userId", auth_1.authenticate, mouvementStockController_1.getMouvementsStockByUserId);
-mvtStockrouter.get("/byUser/aggregate/:userId", auth_1.authenticate, mouvementStockController_1.getMouvementsStockAggregatedByUserId);
-mvtStockrouter.get("/region/:regionId", auth_1.authenticate, mouvementStockController_1.getMouvementStockByRegion);
-mvtStockrouter.post("/", auth_1.authenticate, mouvementStockController_1.createMouvementStock);
-mvtStockrouter.put("/:id", auth_1.authenticate, mouvementStockController_1.updateMouvementStock);
-mvtStockrouter.delete("/:id", auth_1.authenticate, mouvementStockController_1.deleteMouvementStock);
-mvtStockrouter.put("/validate/:id", auth_1.authenticate, mouvementStockController_2.validateState);
+mvtStockrouter.get(
+  "/",
+  auth_1.authenticate,
+  mouvementStockController_1.getAllMouvementsStock,
+);
+mvtStockrouter.get(
+  "/:id",
+  auth_1.authenticate,
+  mouvementStockController_1.getMouvementStockById,
+);
+mvtStockrouter.get(
+  "/by-point-vente/:pointVenteId",
+  auth_1.authenticate,
+  mouvementStockController_1.getMouvementsStockByPointVente,
+);
+mvtStockrouter.get(
+  "/by-point-vente/page/:pointVenteId",
+  auth_1.authenticate,
+  mouvementStockController_1.getMouvementsStockByPointVenteId,
+);
+mvtStockrouter.get(
+  "/by-point-vente/aggregate/:pointVenteId",
+  auth_1.authenticate,
+  mouvementStockController_1.getMouvementsStockAggregatedByPointVente,
+);
+mvtStockrouter.get(
+  "/byUser/:userId",
+  auth_1.authenticate,
+  mouvementStockController_1.getMouvementsStockByUserId,
+);
+mvtStockrouter.get(
+  "/byUser/aggregate/:userId",
+  auth_1.authenticate,
+  mouvementStockController_1.getMouvementsStockAggregatedByUserId,
+);
+mvtStockrouter.get(
+  "/region/:regionId",
+  auth_1.authenticate,
+  mouvementStockController_1.getMouvementStockByRegion,
+);
+mvtStockrouter.post(
+  "/",
+  auth_1.authenticate,
+  mouvementStockController_1.createMouvementStock,
+);
+mvtStockrouter.put(
+  "/:id",
+  auth_1.authenticate,
+  mouvementStockController_1.updateMouvementStock,
+);
+mvtStockrouter.delete(
+  "/:id",
+  auth_1.authenticate,
+  mouvementStockController_1.deleteMouvementStock,
+);
+mvtStockrouter.put(
+  "/validate/:id",
+  auth_1.authenticate,
+  mouvementStockController_2.validateState,
+);
 exports.default = mvtStockrouter;

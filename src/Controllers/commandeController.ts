@@ -3,6 +3,7 @@
 import { Request, Response } from "express";
 import mongoose from "mongoose";
 import { Commande, CommandeProduit, MouvementStock } from "../Models/model";
+import { renderCommandePdf } from "./generateCommandePdf";
 
 const getPaginationOptions = (req: Request) => {
   const page = parseInt(req.query.page as string) || 1;
@@ -206,9 +207,95 @@ export const getCommandeById = async (req: Request, res: Response) => {
  * POST /commandes
  */
 
+// export const createCommande = async (req: Request, res: Response) => {
+//   try {
+//     const { user, region, pointVente, depotCentral, produits } = req.body;
+
+//     if (!user || !produits || produits.length === 0) {
+//       res
+//         .status(400)
+//         .json({ message: "L'utilisateur et les produits sont requis." });
+//       return;
+//     }
+
+//     const hasPointVente = !!pointVente;
+//     const hasRegion = !!region;
+//     const hasDepotCentral = depotCentral === true;
+
+//     if (!hasPointVente && !hasRegion && !hasDepotCentral) {
+//       res
+//         .status(400)
+//         .json({ message: "La commande doit être liée à une localisation." });
+//       return;
+//     }
+
+//     // 1. Créer la commande (vide pour le moment)
+//     const numero = `CMD-${Date.now()}`;
+//     const commande = new Commande({
+//       numero,
+//       user,
+//       region,
+//       pointVente,
+//       depotCentral,
+//       produits: [], // vide au départ
+//       statut: "attente",
+//     });
+//     await commande.save();
+
+//     // 2. Créer les CommandeProduits avec l'ID de la commande
+//     const createdCommandeProduits = await Promise.all(
+//       produits.map(async (prod: any) => {
+//         const created = new CommandeProduit({
+//           commandeId: commande._id, // liaison ici
+//           produit: prod.produit,
+//           quantite: prod.quantite,
+//           uniteMesure: prod.uniteMesure,
+//           statut: "attente",
+//         });
+//         await created.save();
+//         return created._id;
+//       }),
+//     );
+
+//     // 3. Mise à jour de la commande avec les produits créés
+//     commande.produits = createdCommandeProduits;
+//     await commande.save();
+
+//     // 4. Renvoyer la commande peuplée
+//     const populated = await Commande.findById(commande._id)
+//       .populate("user", "-password")
+//       .populate("region")
+//       .populate({
+//         path: "pointVente",
+//         populate: { path: "region", model: "Region" },
+//       })
+//       .populate({
+//         path: "produits",
+//         populate: { path: "produit" },
+//       });
+
+//     res.status(201).json(populated);
+//   } catch (error) {
+//     res.status(400).json({
+//       message: "Erreur lors de la création de la commande.",
+//       error: (error as Error).message,
+//     });
+//   }
+// };
+
 export const createCommande = async (req: Request, res: Response) => {
   try {
-    const { user, region, pointVente, depotCentral, produits } = req.body;
+    const {
+      user,
+      region,
+      pointVente,
+      depotCentral,
+      produits,
+      organisation,
+      print,
+    } = req.body;
+    // print: bool optionnel pour forcer le PDF depuis le body
+    const wantPdf = req.query.pdf === "1" || print === true;
 
     if (!user || !produits || produits.length === 0) {
       res
@@ -228,7 +315,6 @@ export const createCommande = async (req: Request, res: Response) => {
       return;
     }
 
-    // 1. Créer la commande (vide pour le moment)
     const numero = `CMD-${Date.now()}`;
     const commande = new Commande({
       numero,
@@ -236,19 +322,17 @@ export const createCommande = async (req: Request, res: Response) => {
       region,
       pointVente,
       depotCentral,
-      produits: [], // vide au départ
+      produits: [],
       statut: "attente",
     });
     await commande.save();
 
-    // 2. Créer les CommandeProduits avec l'ID de la commande
     const createdCommandeProduits = await Promise.all(
       produits.map(async (prod: any) => {
         const created = new CommandeProduit({
-          commandeId: commande._id, // liaison ici
+          commandeId: commande._id,
           produit: prod.produit,
           quantite: prod.quantite,
-          uniteMesure: prod.uniteMesure,
           statut: "attente",
         });
         await created.save();
@@ -256,11 +340,9 @@ export const createCommande = async (req: Request, res: Response) => {
       }),
     );
 
-    // 3. Mise à jour de la commande avec les produits créés
     commande.produits = createdCommandeProduits;
     await commande.save();
 
-    // 4. Renvoyer la commande peuplée
     const populated = await Commande.findById(commande._id)
       .populate("user", "-password")
       .populate("region")
@@ -273,6 +355,21 @@ export const createCommande = async (req: Request, res: Response) => {
         populate: { path: "produit" },
       });
 
+    if (!populated) {
+      res.status(404).json({ message: "Commande introuvable après création." });
+      return;
+    }
+
+    // 👉 Si on veut un PDF immédiatement
+    if (wantPdf) {
+      await renderCommandePdf(res, populated, {
+        organisation,
+        format: (req.query.format as any) || "pos80",
+      });
+      return; // on a streamé le PDF
+    }
+
+    // Sinon JSON standard
     res.status(201).json(populated);
   } catch (error) {
     res.status(400).json({
@@ -423,5 +520,40 @@ export const deleteCommande = async (req: Request, res: Response) => {
       error: (error as Error).message,
     });
     return;
+  }
+};
+
+// src/controllers/commande.controller.ts (suite)
+export const printCommande = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const format = (req.query.format as any) || "pos80";
+
+    const commande = await Commande.findById(id)
+      .populate("user", "-password")
+      .populate("region")
+      .populate({
+        path: "pointVente",
+        populate: { path: "region", model: "Region" },
+      })
+      .populate({
+        path: "produits",
+        populate: { path: "produit" },
+      });
+
+    if (!commande) {
+      res.status(404).json({ message: "Commande introuvable" });
+      return;
+    }
+
+    // Optionnel: fournir l'organisation via query, sinon prends celle par défaut côté serveur
+    const organisation = req.body?.organisation || null;
+
+    await renderCommandePdf(res, commande, { organisation, format });
+  } catch (error) {
+    res.status(500).json({
+      message: "Erreur lors de l'impression du bon de commande.",
+      error: (error as Error).message,
+    });
   }
 };

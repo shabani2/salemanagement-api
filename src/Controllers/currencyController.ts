@@ -38,7 +38,9 @@ export const searchCurrency = async (req: Request, res: Response) => {
     const currencies = await Currency.find(filter).sort({ createdAt: -1 });
     res.json(currencies);
   } catch (err) {
-    res.status(500).json({ message: "Erreur lors de la recherche", error: err });
+    res
+      .status(500)
+      .json({ message: "Erreur lors de la recherche", error: err });
   }
 };
 
@@ -116,7 +118,10 @@ export const updateCurrency = async (req: Request, res: Response) => {
   } catch (err: any) {
     res
       .status(400)
-      .json({ message: "Erreur lors de la mise à jour", error: err.message ?? err });
+      .json({
+        message: "Erreur lors de la mise à jour",
+        error: err.message ?? err,
+      });
   }
 };
 
@@ -189,11 +194,24 @@ export const createExchangeRate = async (req: Request, res: Response) => {
       return;
     }
     if (String(baseCurrency) === String(targetCurrency)) {
-      res.status(400).json({ message: "La devise source et cible doivent être différentes" });
+      res
+        .status(400)
+        .json({
+          message: "La devise source et cible doivent être différentes",
+        });
       return;
     }
-    if (expirationDate && effectiveDate && new Date(expirationDate) <= new Date(effectiveDate)) {
-      res.status(400).json({ message: "La date d'expiration doit être postérieure à la date d'effet" });
+    if (
+      expirationDate &&
+      effectiveDate &&
+      new Date(expirationDate) <= new Date(effectiveDate)
+    ) {
+      res
+        .status(400)
+        .json({
+          message:
+            "La date d'expiration doit être postérieure à la date d'effet",
+        });
       return;
     }
 
@@ -279,7 +297,9 @@ export const createDiscount = async (req: Request, res: Response) => {
     if (code) {
       const exists = await Discount.findOne({ code });
       if (exists) {
-        res.status(400).json({ message: "Un code de réduction identique existe déjà" });
+        res
+          .status(400)
+          .json({ message: "Un code de réduction identique existe déjà" });
         return;
       }
     }
@@ -358,6 +378,9 @@ export const updateFinancialSettings = async (req: Request, res: Response) => {
   } catch (err: any) {
     res
       .status(400)
-      .json({ message: "Erreur lors de la mise à jour", error: err.message ?? err });
+      .json({
+        message: "Erreur lors de la mise à jour",
+        error: err.message ?? err,
+      });
   }
 };
