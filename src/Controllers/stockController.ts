@@ -3,10 +3,51 @@ import { Stock } from "../Models/model";
 import { Types } from "mongoose";
 
 // 🔹 Obtenir tous les stocks
+
+/** ===========================================================
+ * Helpers: tri + déduplication côté serveur
+ * - Key = produitId | (pointVenteId || regionId || DEPOT_CENTRAL)
+ * - On présuppose un tri DESC sur updatedAt/createdAt pour garder le 1er vu
+ * =========================================================== */
+
+const getIdStr = (v: any): string => {
+  if (!v) return "";
+  if (typeof v === "string") return v;
+  if (typeof v === "object" && v._id) {
+    const s = v._id.toString?.();
+    if (typeof s === "string") return s;
+  }
+  return v.toString?.() ?? "";
+};
+
+const keyOf = (s: any): string => {
+  const prodId = getIdStr(s?.produit);
+  const locId =
+    getIdStr(s?.pointVente) ||
+    getIdStr(s?.region) ||
+    "DEPOT_CENTRAL";
+  return `${prodId}|${locId}`;
+};
+
+const collapseLatest = <T extends { updatedAt?: Date; createdAt?: Date }>(rows: T[]): T[] => {
+  // rows triées desc → le premier rencontré est le plus récent
+  const seen = new Map<string, T>();
+  for (const r of rows) {
+    const k = keyOf(r as any);
+    if (!seen.has(k)) seen.set(k, r);
+  }
+  return Array.from(seen.values());
+};
+
+/** ===========================================================
+ * GET /stocks (tous)
+ * - Tri par dernière modif
+ * - Déduplication (dernier état par couple produit/emplacement)
+ * =========================================================== */
 export const getAllStocks = async (req: Request, res: Response) => {
   try {
     const stocks = await Stock.find()
-      .sort({ createdAt: -1 })
+      .sort({ updatedAt: -1, createdAt: -1, _id: -1 })
       .populate({
         path: "produit",
         populate: { path: "categorie", model: "Categorie" },
@@ -16,8 +57,9 @@ export const getAllStocks = async (req: Request, res: Response) => {
         populate: { path: "region", model: "Region" },
       })
       .populate("region");
-
-    res.json(stocks);
+//@ts-ignore
+    const uniques = collapseLatest(stocks);
+    res.json(uniques);
     return;
   } catch (err) {
     res.status(500).json({ message: "Erreur interne", error: err });
@@ -25,13 +67,18 @@ export const getAllStocks = async (req: Request, res: Response) => {
   }
 };
 
+/** ===========================================================
+ * GET /stocks/region/:regionId
+ * - Filtre région (région directe OU région du point de vente)
+ * - Tri par dernière modif
+ * - Déduplication (dernier état par couple produit/emplacement)
+ * =========================================================== */
 export const getStocksByRegion = async (req: Request, res: Response) => {
   try {
     const { regionId } = req.params;
 
     const stocks = await Stock.find()
-      .sort({ createdAt: -1 })
-
+      .sort({ updatedAt: -1, createdAt: -1, _id: -1 })
       .populate({
         path: "produit",
         populate: { path: "categorie", model: "Categorie" },
@@ -42,13 +89,15 @@ export const getStocksByRegion = async (req: Request, res: Response) => {
       })
       .populate("region");
 
-    const stocksFiltrés = stocks.filter(
+    // garde ce qui match la région (dépôt central OU PV de cette région)
+    const candidats = stocks.filter(
       (s: any) =>
-        s.pointVente?.region?._id?.toString() === regionId ||
-        s.region?._id?.toString() === regionId,
+        getIdStr(s?.pointVente?.region?._id) === regionId ||
+        getIdStr(s?.region?._id) === regionId
     );
-
-    res.json(stocksFiltrés);
+//@ts-ignore
+    const uniques = collapseLatest(candidats);
+    res.json(uniques);
     return;
   } catch (err) {
     res.status(500).json({ message: "Erreur interne", error: err });
@@ -56,6 +105,13 @@ export const getStocksByRegion = async (req: Request, res: Response) => {
   }
 };
 
+/** ===========================================================
+ * GET /stocks/point-vente/:pointVenteId
+ * - Filtre point de vente
+ * - Tri par dernière modif
+ * - Déduplication (dernier état par couple produit/emplacement)
+ *   (utile si plusieurs versions d’un même produit existent)
+ * =========================================================== */
 export const getStocksByPointVente = async (req: Request, res: Response) => {
   try {
     const { pointVenteId } = req.params;
@@ -66,7 +122,7 @@ export const getStocksByPointVente = async (req: Request, res: Response) => {
     }
 
     const stocks = await Stock.find({ pointVente: pointVenteId })
-      .sort({ createdAt: -1 })
+      .sort({ updatedAt: -1, createdAt: -1, _id: -1 })
       .populate({
         path: "produit",
         populate: { path: "categorie", model: "Categorie" },
@@ -76,8 +132,9 @@ export const getStocksByPointVente = async (req: Request, res: Response) => {
         populate: { path: "region", model: "Region" },
       })
       .populate("region");
-
-    res.json(stocks);
+//@ts-ignore
+    const uniques = collapseLatest(stocks);
+    res.json(uniques);
     return;
   } catch (err) {
     res.status(500).json({ message: "Erreur interne", error: err });
@@ -85,6 +142,10 @@ export const getStocksByPointVente = async (req: Request, res: Response) => {
   }
 };
 
+/** ===========================================================
+ * GET /stocks/:id (one)
+ * - Inchangé : charge un document précis
+ * =========================================================== */
 export const getStockById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;

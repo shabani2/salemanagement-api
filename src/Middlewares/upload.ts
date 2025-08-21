@@ -13,7 +13,7 @@ if (process.env.NODE_ENV === "production") {
   storage = multer.diskStorage({
     destination: (req: Request, file, cb) => {
       const role = (req.body as { role?: string }).role || "default";
-      const uploadDir = path.join(__dirname, `../../assets/${role}`);
+      const uploadDir = path.join(__dirname, `/assets/${role}`);
 
       if (!fs.existsSync(uploadDir)) {
         fs.mkdirSync(uploadDir, { recursive: true });

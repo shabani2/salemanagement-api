@@ -8,6 +8,7 @@ import {
   getUsersByRegion,
   updateUser,
 } from "../Controllers/userController";
+import { upload } from "../Middlewares/upload";
 
 const usersRouter = express.Router();
 
@@ -44,6 +45,6 @@ usersRouter.get(
 //   authorize(["AdminPointVente"]),
 //   getUsersByPointVente,
 // );
-usersRouter.put("/", authenticate, updateUser);
+usersRouter.put("/", upload.single('image'), authenticate, updateUser);
 
 export default usersRouter;

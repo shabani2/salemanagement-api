@@ -12,6 +12,7 @@ import morgan from "morgan";
 import regionRoutes from "./Routes/regionRoutes";
 import pointVenteRoutes from "./Routes/pointVenteRoutes";
 import path from "path";
+import fs from "fs";
 import { Produit } from "./Models/model";
 import mouvementStockRoute from "./Routes/mouvementStockRoute";
 import stockRouter from "./Routes/stockRoutes";
@@ -48,40 +49,30 @@ app.use(express.urlencoded({ limit: "20mb", extended: true }));
 // Connexion à MongoDB
 connectDB();
 
-// Routes statiques pour les images des catégories
-app.use(
-  "/assets/categorie",
-  express.static(path.join(__dirname, "assets/categorie")),
-);
-app.use(
-  "/assets/SuperAdmin",
-  express.static(path.join(__dirname, "assets/SuperAdmin")),
-);
-app.use(
-  "/assets/AdminRegion",
-  express.static(path.join(__dirname, "assets/AdminRegion")),
-);
-app.use(
-  "/assets/AdminPointVente",
-  express.static(path.join(__dirname, "assets/AdminPointVente")),
-);
+//fonction statique pour exposer les fichier
 
-app.use(
-  "/assets/Vendeur",
-  express.static(path.join(__dirname, "assets/Vendeur")),
-);
-app.use(
-  "/assets/Client",
-  express.static(path.join(__dirname, "assets/Client")),
-);
-app.use(
-  "/assets/Logisticien",
-  express.static(path.join(__dirname, "assets/Logisticien")),
-);
-app.use(
-  "/assets/organisations",
-  express.static(path.join(__dirname, "assets/organisations")),
-);
+
+const ASSETS_SRC  = path.resolve(process.cwd(), "src/assets");
+const ASSETS_ROOT = path.resolve(process.cwd(), "assets");
+
+function mountDualStatic(prefix: string, subdir: string) {
+  const fromSrc  = path.join(ASSETS_SRC,  subdir);
+  const fromRoot = path.join(ASSETS_ROOT, subdir);
+
+  // Essaye d'abord src/assets/<subdir>, puis fallback vers assets/<subdir>
+  app.use(prefix, express.static(fromSrc,  { fallthrough: true }));
+  app.use(prefix, express.static(fromRoot));
+}
+
+// Exemple d'utilisation
+mountDualStatic("/assets/categorie",      "categorie");
+mountDualStatic("/assets/SuperAdmin",     "SuperAdmin");
+mountDualStatic("/assets/AdminRegion",    "AdminRegion");
+mountDualStatic("/assets/AdminPointVente","AdminPointVente");
+mountDualStatic("/assets/Vendeur",        "Vendeur");
+mountDualStatic("/assets/Client",         "Client");
+mountDualStatic("/assets/Logisticien",    "Logisticien");
+mountDualStatic("/assets/organisations",  "organisations");
 
 // Routes principales
 app.use("/auth", AuthRoutes);

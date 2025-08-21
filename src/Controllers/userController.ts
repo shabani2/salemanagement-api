@@ -1,6 +1,8 @@
 import { Request, Response } from "express";
 import { User } from "../Models/model";
 import { AuthenticatedRequest } from "../Middlewares/auth";
+import { uploadFile } from "../services/uploadService";
+import { MulterRequest } from "../Models/multerType";
 
 // Obtenir tous les utilisateurs (SuperAdmin seulement)
 export const getAllUsers = async (req: Request, res: Response) => {
@@ -110,12 +112,13 @@ export const deleteUser = async (
 
 // Mettre à jour son profil (Tous les utilisateurs)
 export const updateUser = async (
-  req: AuthenticatedRequest,
+  req: MulterRequest, // Utilise le même type que register
   res: Response,
 ): Promise<void> => {
   try {
     console.log("🔹 Requête reçue pour mise à jour", req.body);
-    console.log("🔹 ID utilisateur:", req.user.userId);
+    console.log("🔹 Fichier reçu:", req.file);
+    console.log("🔹 ID utilisateur:", (req as AuthenticatedRequest).user?.userId);
 
     const {
       _id,
@@ -125,7 +128,6 @@ export const updateUser = async (
       adresse,
       telephone,
       role,
-      image,
       pointVente,
       region,
     } = req.body;
@@ -144,29 +146,38 @@ export const updateUser = async (
 
     if (nom) updateFields.nom = nom;
     if (prenom) updateFields.prenom = prenom;
-    // if (email) updateFields.email = email;
     if (adresse) updateFields.adresse = adresse;
     if (role) updateFields.role = role;
-    if (image) updateFields.image = image;
     if (pointVente) updateFields.pointVente = pointVente;
     if (region) updateFields.region = region;
+
+    // Gestion de l'image - MÊME LOGIQUE QUE DANS REGISTER
+    if (req.file) {
+      try {
+        // Upload de la nouvelle image avec le même rôle que register
+        const imagePath = await uploadFile(req.file, role || user.role);
+        updateFields.image = imagePath;
+        console.log("✅ Nouvelle image uploadée:", imagePath);
+      } catch (uploadError) {
+        console.error("❌ Erreur d'upload:", uploadError);
+        res.status(500).json({ message: "Échec de l'upload de l'image" });
+        return;
+      }
+    }
+    // Si pas de nouveau fichier, on garde l'image existante (pas besoin de la modifier)
 
     // ✅ Vérifier uniquement si le numéro de téléphone a changé
     if (telephone && telephone !== user.telephone) {
       console.log("🔍 Vérification de l'unicité du numéro 1 = ", telephone);
-      console.log(
-        "🔍 Vérification de l'unicité du numéro 2 = ",
-        user.telephone,
-      );
-      //console.log("🔍 Vérification de l'unicité du numéro...");
-      const existingUser =
-        (await User.findOne({ telephone })) || (await User.findOne({ email }));
-      //const existingUser = await User.findOne({ telephone });
+      console.log("🔍 Vérification de l'unicité du numéro 2 = ", user.telephone);
+      
+      const existingUser = await User.findOne({ 
+        $or: [{ telephone }, { email: telephone }] 
+      });
 
       // ❌ Bloquer seulement si un autre utilisateur a ce numéro
       if (existingUser && existingUser._id.toString() !== user._id.toString()) {
-        console.log("❌ Le numéro de téléphone ou l'amail est déjà utilisé");
-
+        console.log("❌ Le numéro de téléphone ou l'email est déjà utilisé");
         res.status(400).json({
           message: "Le numéro de téléphone ou l'email est déjà utilisé",
         });
@@ -182,7 +193,6 @@ export const updateUser = async (
     // Si aucun champ n'est modifié, ne rien faire
     if (Object.keys(updateFields).length === 0) {
       console.log("ℹ️ Aucun changement détecté.");
-
       res.status(200).json({ message: "Aucune modification effectuée." });
       return;
     }
@@ -196,9 +206,7 @@ export const updateUser = async (
 
     if (!updatedUser) {
       console.log("❌ Échec de la mise à jour de l'utilisateur");
-      res
-        .status(500)
-        .json({ message: "Échec de la mise à jour de l'utilisateur" });
+      res.status(500).json({ message: "Échec de la mise à jour de l'utilisateur" });
       return;
     }
 
