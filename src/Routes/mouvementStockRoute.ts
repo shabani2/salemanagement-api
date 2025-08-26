@@ -6,11 +6,11 @@ import {
   updateMouvementStock,
   deleteMouvementStock,
   getMouvementsStockByPointVente,
-  getMouvementStockByRegion,
-  getMouvementsStockByPointVenteId,
+  getMouvementStockByRegion, 
   getMouvementsStockByUserId,
   getMouvementsStockAggregatedByUserId,
   getMouvementsStockAggregatedByPointVente,
+  getMouvementsStockByPointVenteId,
 } from "../Controllers/mouvementStockController";
 import { authenticate } from "../Middlewares/auth";
 import { validateState } from "../Controllers/mouvementStockController";

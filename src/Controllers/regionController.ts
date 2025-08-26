@@ -1,14 +1,7 @@
 import { Request, Response } from "express";
 import { Region } from "../Models/model";
 
-// export const getAllRegions = async (req: Request, res: Response) => {
-//   try {
-//     const regions = await Region.find();
-//     res.json(regions);
-//   } catch (err) {
-//     res.status(500).json({ message: "Erreur interne", error: err });
-//   }
-// };
+
 
 export const getAllRegions = async (req: Request, res: Response) => {
   try {

@@ -18,6 +18,7 @@ pointVenteRoutes.get(
   // authorize(["SuperAdmin", "AdminRegion"]),
   getAllPointVentes,
 );
+
 pointVenteRoutes.post(
   "/",
   authenticate,
