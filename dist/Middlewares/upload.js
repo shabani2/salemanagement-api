@@ -17,7 +17,7 @@ else {
     storage = multer_1.default.diskStorage({
         destination: (req, file, cb) => {
             const role = req.body.role || "default";
-            const uploadDir = path_1.default.join(__dirname, `../../assets/${role}`);
+            const uploadDir = path_1.default.join(__dirname, `/assets/${role}`);
             if (!fs_1.default.existsSync(uploadDir)) {
                 fs_1.default.mkdirSync(uploadDir, { recursive: true });
             }

@@ -11,14 +11,6 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getRegionById = exports.deleteRegion = exports.updateRegion = exports.createRegion = exports.getAllRegions = void 0;
 const model_1 = require("../Models/model");
-// export const getAllRegions = async (req: Request, res: Response) => {
-//   try {
-//     const regions = await Region.find();
-//     res.json(regions);
-//   } catch (err) {
-//     res.status(500).json({ message: "Erreur interne", error: err });
-//   }
-// };
 const getAllRegions = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const regions = yield model_1.Region.aggregate([

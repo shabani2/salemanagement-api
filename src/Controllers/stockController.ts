@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { Stock } from "../Models/model";
+import { PointVente, Stock } from "../Models/model";
 import { Types } from "mongoose";
 
 // 🔹 Obtenir tous les stocks
@@ -23,13 +23,13 @@ const getIdStr = (v: any): string => {
 const keyOf = (s: any): string => {
   const prodId = getIdStr(s?.produit);
   const locId =
-    getIdStr(s?.pointVente) ||
-    getIdStr(s?.region) ||
-    "DEPOT_CENTRAL";
+    getIdStr(s?.pointVente) || getIdStr(s?.region) || "DEPOT_CENTRAL";
   return `${prodId}|${locId}`;
 };
 
-const collapseLatest = <T extends { updatedAt?: Date; createdAt?: Date }>(rows: T[]): T[] => {
+const collapseLatest = <T extends { updatedAt?: Date; createdAt?: Date }>(
+  rows: T[],
+): T[] => {
   // rows triées desc → le premier rencontré est le plus récent
   const seen = new Map<string, T>();
   for (const r of rows) {
@@ -57,7 +57,7 @@ export const getAllStocks = async (req: Request, res: Response) => {
         populate: { path: "region", model: "Region" },
       })
       .populate("region");
-//@ts-ignore
+    //@ts-ignore
     const uniques = collapseLatest(stocks);
     res.json(uniques);
     return;
@@ -77,7 +77,30 @@ export const getStocksByRegion = async (req: Request, res: Response) => {
   try {
     const { regionId } = req.params;
 
-    const stocks = await Stock.find()
+    if (!regionId || !Types.ObjectId.isValid(regionId)) {
+      res.status(400).json({ message: "ID de région invalide" });
+    }
+    const regionObjId = new Types.ObjectId(regionId);
+
+    // 1) IDs des PV de la région (forcés en ObjectId)
+    const pvIdsRaw = await PointVente.find({ region: regionObjId }).distinct(
+      "_id",
+    );
+    const pvIds = pvIdsRaw.map((id: any) => new Types.ObjectId(id));
+
+    // DEBUG utile
+    console.log("[getStocksByRegion] regionId:", regionId, "pvIds:", pvIds);
+
+    // 2) Requête: stocks régionaux OU stocks des PV de cette région
+    const query: any = {
+      $or: [{ region: regionObjId }],
+    };
+    if (pvIds.length > 0) {
+      query.$or.push({ pointVente: { $in: pvIds } });
+    }
+
+    // 3) Lecture
+    const stocks = await Stock.find(query)
       .sort({ updatedAt: -1, createdAt: -1, _id: -1 })
       .populate({
         path: "produit",
@@ -89,19 +112,14 @@ export const getStocksByRegion = async (req: Request, res: Response) => {
       })
       .populate("region");
 
-    // garde ce qui match la région (dépôt central OU PV de cette région)
-    const candidats = stocks.filter(
-      (s: any) =>
-        getIdStr(s?.pointVente?.region?._id) === regionId ||
-        getIdStr(s?.region?._id) === regionId
-    );
-//@ts-ignore
-    const uniques = collapseLatest(candidats);
+    // 4) Déduplication dernière version
+    // @ts-ignore
+    const uniques = collapseLatest(stocks);
+
     res.json(uniques);
-    return;
   } catch (err) {
+    console.error("getStocksByRegion error:", err);
     res.status(500).json({ message: "Erreur interne", error: err });
-    return;
   }
 };
 
@@ -132,7 +150,7 @@ export const getStocksByPointVente = async (req: Request, res: Response) => {
         populate: { path: "region", model: "Region" },
       })
       .populate("region");
-//@ts-ignore
+    //@ts-ignore
     const uniques = collapseLatest(stocks);
     res.json(uniques);
     return;
@@ -252,64 +270,77 @@ export const deleteStock = async (req: Request, res: Response) => {
   }
 };
 
-export const checkStock = async (
-  type: string,
-  produitId: string,
-  pointVenteId?: string,
-): Promise<number> => {
-  if (!Types.ObjectId.isValid(produitId)) {
-    console.warn("checkStock: produitId invalide", produitId);
-    return 0;
-  }
+type CheckStockInput = {
+  type: string; // "Vente" | "Commande" | "Sortie" | "Livraison" | ...
+  produitId: string;
+  regionId?: string;
+  pointVenteId?: string;
+};
 
-  if (pointVenteId && !Types.ObjectId.isValid(pointVenteId)) {
-    console.warn("checkStock: pointVenteId invalide", pointVenteId);
-    return 0;
-  }
+export const checkStock = async ({
+  type,
+  produitId,
+  regionId,
+  pointVenteId,
+}: CheckStockInput): Promise<number> => {
+  if (!Types.ObjectId.isValid(produitId)) return 0;
+  if (pointVenteId && !Types.ObjectId.isValid(pointVenteId)) return 0;
+  if (regionId && !Types.ObjectId.isValid(regionId)) return 0;
 
-  let query: any = { produit: produitId };
+  const query: any = { produit: produitId };
 
-  if (type === "Livraison") {
-    query.depotCentral = true;
-  } else if (["Vente", "Commande", "Sortie"].includes(type)) {
-    if (!pointVenteId) {
-      console.warn("checkStock: pointVenteId manquant pour type", type);
-      return 0;
-    }
+  // ✅ Priorité aux portées locales
+  if (regionId) {
+    query.region = regionId;
+    // on exclut explicitement le dépôt central
+    query.depotCentral = { $ne: true };
+  } else if (pointVenteId) {
     query.pointVente = pointVenteId;
+    query.depotCentral = { $ne: true };
+  } else if (type === "Livraison") {
+    // ✅ seulement si aucune portée n’est donnée
+    query.depotCentral = true;
   } else {
-    console.warn("checkStock: type invalide", type);
+    // cas incohérent : pas de portée et pas de livraison
     return 0;
   }
 
-  console.log("checkStock query", query);
   const stock = await Stock.findOne(query);
-  console.log("stock result =", stock ?? "NO STOCK FOUND");
-
-  return stock?.quantite || 0;
+  return stock?.quantite ?? 0;
 };
 
 export const checkStockHandler = async (req: Request, res: Response) => {
-  const { type, produitId, quantite, pointVenteId } = req.body;
+  const { type, produitId, quantite, pointVenteId, regionId } = req.body as {
+    type: string;
+    produitId: string;
+    quantite: number;
+    pointVenteId?: string;
+    regionId?: string;
+  };
 
   if (!type || !produitId || quantite == null) {
     res.status(400).json({ success: false, message: "Paramètres manquants" });
-    return;
+  }
+  if (regionId && pointVenteId) {
+    res.status(400).json({
+      success: false,
+      message: "Fournir soit regionId, soit pointVenteId, pas les deux.",
+    });
   }
 
   try {
-    const quantiteDisponible = await checkStock(type, produitId, pointVenteId);
-    console.log("quantiteDisponible:", quantiteDisponible);
-
+    const quantiteDisponible = await checkStock({
+      type,
+      produitId,
+      regionId,
+      pointVenteId,
+    });
     res.json({
       success: true,
       quantiteDisponible,
-      suffisant: quantiteDisponible >= quantite,
+      suffisant: quantiteDisponible >= Number(quantite),
     });
-    return;
-  } catch (error) {
-    console.error("Erreur API checkStock:", error);
+  } catch (e) {
     res.status(500).json({ success: false, message: "Erreur serveur" });
-    return;
   }
 };

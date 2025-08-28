@@ -45,6 +45,6 @@ usersRouter.get(
 //   authorize(["AdminPointVente"]),
 //   getUsersByPointVente,
 // );
-usersRouter.put("/", upload.single('image'), authenticate, updateUser);
+usersRouter.put("/", upload.single("image"), authenticate, updateUser);
 
 export default usersRouter;

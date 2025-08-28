@@ -1,8 +1,6 @@
 import { Request, Response } from "express";
 import { Region } from "../Models/model";
 
-
-
 export const getAllRegions = async (req: Request, res: Response) => {
   try {
     const regions = await Region.aggregate([

@@ -6,7 +6,7 @@ import {
   updateMouvementStock,
   deleteMouvementStock,
   getMouvementsStockByPointVente,
-  getMouvementStockByRegion, 
+  getMouvementStockByRegion,
   getMouvementsStockByUserId,
   getMouvementsStockAggregatedByUserId,
   getMouvementsStockAggregatedByPointVente,

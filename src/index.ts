@@ -51,28 +51,27 @@ connectDB();
 
 //fonction statique pour exposer les fichier
 
-
-const ASSETS_SRC  = path.resolve(process.cwd(), "src/assets");
+const ASSETS_SRC = path.resolve(process.cwd(), "src/assets");
 const ASSETS_ROOT = path.resolve(process.cwd(), "assets");
 
 function mountDualStatic(prefix: string, subdir: string) {
-  const fromSrc  = path.join(ASSETS_SRC,  subdir);
+  const fromSrc = path.join(ASSETS_SRC, subdir);
   const fromRoot = path.join(ASSETS_ROOT, subdir);
 
   // Essaye d'abord src/assets/<subdir>, puis fallback vers assets/<subdir>
-  app.use(prefix, express.static(fromSrc,  { fallthrough: true }));
+  app.use(prefix, express.static(fromSrc, { fallthrough: true }));
   app.use(prefix, express.static(fromRoot));
 }
 
 // Exemple d'utilisation
-mountDualStatic("/assets/categorie",      "categorie");
-mountDualStatic("/assets/SuperAdmin",     "SuperAdmin");
-mountDualStatic("/assets/AdminRegion",    "AdminRegion");
-mountDualStatic("/assets/AdminPointVente","AdminPointVente");
-mountDualStatic("/assets/Vendeur",        "Vendeur");
-mountDualStatic("/assets/Client",         "Client");
-mountDualStatic("/assets/Logisticien",    "Logisticien");
-mountDualStatic("/assets/organisations",  "organisations");
+mountDualStatic("/assets/categorie", "categorie");
+mountDualStatic("/assets/SuperAdmin", "SuperAdmin");
+mountDualStatic("/assets/AdminRegion", "AdminRegion");
+mountDualStatic("/assets/AdminPointVente", "AdminPointVente");
+mountDualStatic("/assets/Vendeur", "Vendeur");
+mountDualStatic("/assets/Client", "Client");
+mountDualStatic("/assets/Logisticien", "Logisticien");
+mountDualStatic("/assets/organisations", "organisations");
 
 // Routes principales
 app.use("/auth", AuthRoutes);

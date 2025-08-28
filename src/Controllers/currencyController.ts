@@ -116,12 +116,10 @@ export const updateCurrency = async (req: Request, res: Response) => {
 
     res.json(updated);
   } catch (err: any) {
-    res
-      .status(400)
-      .json({
-        message: "Erreur lors de la mise à jour",
-        error: err.message ?? err,
-      });
+    res.status(400).json({
+      message: "Erreur lors de la mise à jour",
+      error: err.message ?? err,
+    });
   }
 };
 
@@ -194,11 +192,9 @@ export const createExchangeRate = async (req: Request, res: Response) => {
       return;
     }
     if (String(baseCurrency) === String(targetCurrency)) {
-      res
-        .status(400)
-        .json({
-          message: "La devise source et cible doivent être différentes",
-        });
+      res.status(400).json({
+        message: "La devise source et cible doivent être différentes",
+      });
       return;
     }
     if (
@@ -206,12 +202,9 @@ export const createExchangeRate = async (req: Request, res: Response) => {
       effectiveDate &&
       new Date(expirationDate) <= new Date(effectiveDate)
     ) {
-      res
-        .status(400)
-        .json({
-          message:
-            "La date d'expiration doit être postérieure à la date d'effet",
-        });
+      res.status(400).json({
+        message: "La date d'expiration doit être postérieure à la date d'effet",
+      });
       return;
     }
 
@@ -376,11 +369,9 @@ export const updateFinancialSettings = async (req: Request, res: Response) => {
 
     res.json(updated);
   } catch (err: any) {
-    res
-      .status(400)
-      .json({
-        message: "Erreur lors de la mise à jour",
-        error: err.message ?? err,
-      });
+    res.status(400).json({
+      message: "Erreur lors de la mise à jour",
+      error: err.message ?? err,
+    });
   }
 };

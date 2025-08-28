@@ -13,10 +13,48 @@ exports.checkStockHandler = exports.checkStock = exports.deleteStock = exports.u
 const model_1 = require("../Models/model");
 const mongoose_1 = require("mongoose");
 // 🔹 Obtenir tous les stocks
+/** ===========================================================
+ * Helpers: tri + déduplication côté serveur
+ * - Key = produitId | (pointVenteId || regionId || DEPOT_CENTRAL)
+ * - On présuppose un tri DESC sur updatedAt/createdAt pour garder le 1er vu
+ * =========================================================== */
+const getIdStr = (v) => {
+    var _a, _b, _c, _d;
+    if (!v)
+        return "";
+    if (typeof v === "string")
+        return v;
+    if (typeof v === "object" && v._id) {
+        const s = (_b = (_a = v._id).toString) === null || _b === void 0 ? void 0 : _b.call(_a);
+        if (typeof s === "string")
+            return s;
+    }
+    return (_d = (_c = v.toString) === null || _c === void 0 ? void 0 : _c.call(v)) !== null && _d !== void 0 ? _d : "";
+};
+const keyOf = (s) => {
+    const prodId = getIdStr(s === null || s === void 0 ? void 0 : s.produit);
+    const locId = getIdStr(s === null || s === void 0 ? void 0 : s.pointVente) || getIdStr(s === null || s === void 0 ? void 0 : s.region) || "DEPOT_CENTRAL";
+    return `${prodId}|${locId}`;
+};
+const collapseLatest = (rows) => {
+    // rows triées desc → le premier rencontré est le plus récent
+    const seen = new Map();
+    for (const r of rows) {
+        const k = keyOf(r);
+        if (!seen.has(k))
+            seen.set(k, r);
+    }
+    return Array.from(seen.values());
+};
+/** ===========================================================
+ * GET /stocks (tous)
+ * - Tri par dernière modif
+ * - Déduplication (dernier état par couple produit/emplacement)
+ * =========================================================== */
 const getAllStocks = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const stocks = yield model_1.Stock.find()
-            .sort({ createdAt: -1 })
+            .sort({ updatedAt: -1, createdAt: -1, _id: -1 })
             .populate({
             path: "produit",
             populate: { path: "categorie", model: "Categorie" },
@@ -26,7 +64,9 @@ const getAllStocks = (req, res) => __awaiter(void 0, void 0, void 0, function* (
             populate: { path: "region", model: "Region" },
         })
             .populate("region");
-        res.json(stocks);
+        //@ts-ignore
+        const uniques = collapseLatest(stocks);
+        res.json(uniques);
         return;
     }
     catch (err) {
@@ -35,11 +75,34 @@ const getAllStocks = (req, res) => __awaiter(void 0, void 0, void 0, function* (
     }
 });
 exports.getAllStocks = getAllStocks;
+/** ===========================================================
+ * GET /stocks/region/:regionId
+ * - Filtre région (région directe OU région du point de vente)
+ * - Tri par dernière modif
+ * - Déduplication (dernier état par couple produit/emplacement)
+ * =========================================================== */
 const getStocksByRegion = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { regionId } = req.params;
-        const stocks = yield model_1.Stock.find()
-            .sort({ createdAt: -1 })
+        if (!regionId || !mongoose_1.Types.ObjectId.isValid(regionId)) {
+            res.status(400).json({ message: "ID de région invalide" });
+        }
+        const regionObjId = new mongoose_1.Types.ObjectId(regionId);
+        // 1) IDs des PV de la région (forcés en ObjectId)
+        const pvIdsRaw = yield model_1.PointVente.find({ region: regionObjId }).distinct("_id");
+        const pvIds = pvIdsRaw.map((id) => new mongoose_1.Types.ObjectId(id));
+        // DEBUG utile
+        console.log("[getStocksByRegion] regionId:", regionId, "pvIds:", pvIds);
+        // 2) Requête: stocks régionaux OU stocks des PV de cette région
+        const query = {
+            $or: [{ region: regionObjId }],
+        };
+        if (pvIds.length > 0) {
+            query.$or.push({ pointVente: { $in: pvIds } });
+        }
+        // 3) Lecture
+        const stocks = yield model_1.Stock.find(query)
+            .sort({ updatedAt: -1, createdAt: -1, _id: -1 })
             .populate({
             path: "produit",
             populate: { path: "categorie", model: "Categorie" },
@@ -49,20 +112,24 @@ const getStocksByRegion = (req, res) => __awaiter(void 0, void 0, void 0, functi
             populate: { path: "region", model: "Region" },
         })
             .populate("region");
-        const stocksFiltrés = stocks.filter((s) => {
-            var _a, _b, _c, _d, _e;
-            return ((_c = (_b = (_a = s.pointVente) === null || _a === void 0 ? void 0 : _a.region) === null || _b === void 0 ? void 0 : _b._id) === null || _c === void 0 ? void 0 : _c.toString()) === regionId ||
-                ((_e = (_d = s.region) === null || _d === void 0 ? void 0 : _d._id) === null || _e === void 0 ? void 0 : _e.toString()) === regionId;
-        });
-        res.json(stocksFiltrés);
-        return;
+        // 4) Déduplication dernière version
+        // @ts-ignore
+        const uniques = collapseLatest(stocks);
+        res.json(uniques);
     }
     catch (err) {
+        console.error("getStocksByRegion error:", err);
         res.status(500).json({ message: "Erreur interne", error: err });
-        return;
     }
 });
 exports.getStocksByRegion = getStocksByRegion;
+/** ===========================================================
+ * GET /stocks/point-vente/:pointVenteId
+ * - Filtre point de vente
+ * - Tri par dernière modif
+ * - Déduplication (dernier état par couple produit/emplacement)
+ *   (utile si plusieurs versions d’un même produit existent)
+ * =========================================================== */
 const getStocksByPointVente = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { pointVenteId } = req.params;
@@ -71,7 +138,7 @@ const getStocksByPointVente = (req, res) => __awaiter(void 0, void 0, void 0, fu
             return;
         }
         const stocks = yield model_1.Stock.find({ pointVente: pointVenteId })
-            .sort({ createdAt: -1 })
+            .sort({ updatedAt: -1, createdAt: -1, _id: -1 })
             .populate({
             path: "produit",
             populate: { path: "categorie", model: "Categorie" },
@@ -81,7 +148,9 @@ const getStocksByPointVente = (req, res) => __awaiter(void 0, void 0, void 0, fu
             populate: { path: "region", model: "Region" },
         })
             .populate("region");
-        res.json(stocks);
+        //@ts-ignore
+        const uniques = collapseLatest(stocks);
+        res.json(uniques);
         return;
     }
     catch (err) {
@@ -90,6 +159,10 @@ const getStocksByPointVente = (req, res) => __awaiter(void 0, void 0, void 0, fu
     }
 });
 exports.getStocksByPointVente = getStocksByPointVente;
+/** ===========================================================
+ * GET /stocks/:id (one)
+ * - Inchangé : charge un document précis
+ * =========================================================== */
 const getStockById = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { id } = req.params;
@@ -184,56 +257,63 @@ const deleteStock = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     }
 });
 exports.deleteStock = deleteStock;
-const checkStock = (type, produitId, pointVenteId) => __awaiter(void 0, void 0, void 0, function* () {
-    if (!mongoose_1.Types.ObjectId.isValid(produitId)) {
-        console.warn("checkStock: produitId invalide", produitId);
+const checkStock = (_a) => __awaiter(void 0, [_a], void 0, function* ({ type, produitId, regionId, pointVenteId, }) {
+    var _b;
+    if (!mongoose_1.Types.ObjectId.isValid(produitId))
         return 0;
-    }
-    if (pointVenteId && !mongoose_1.Types.ObjectId.isValid(pointVenteId)) {
-        console.warn("checkStock: pointVenteId invalide", pointVenteId);
+    if (pointVenteId && !mongoose_1.Types.ObjectId.isValid(pointVenteId))
         return 0;
+    if (regionId && !mongoose_1.Types.ObjectId.isValid(regionId))
+        return 0;
+    const query = { produit: produitId };
+    // ✅ Priorité aux portées locales
+    if (regionId) {
+        query.region = regionId;
+        // on exclut explicitement le dépôt central
+        query.depotCentral = { $ne: true };
     }
-    let query = { produit: produitId };
-    if (type === "Livraison") {
+    else if (pointVenteId) {
+        query.pointVente = pointVenteId;
+        query.depotCentral = { $ne: true };
+    }
+    else if (type === "Livraison") {
+        // ✅ seulement si aucune portée n’est donnée
         query.depotCentral = true;
     }
-    else if (["Vente", "Commande", "Sortie"].includes(type)) {
-        if (!pointVenteId) {
-            console.warn("checkStock: pointVenteId manquant pour type", type);
-            return 0;
-        }
-        query.pointVente = pointVenteId;
-    }
     else {
-        console.warn("checkStock: type invalide", type);
+        // cas incohérent : pas de portée et pas de livraison
         return 0;
     }
-    console.log("checkStock query", query);
     const stock = yield model_1.Stock.findOne(query);
-    console.log("stock result =", stock !== null && stock !== void 0 ? stock : "NO STOCK FOUND");
-    return (stock === null || stock === void 0 ? void 0 : stock.quantite) || 0;
+    return (_b = stock === null || stock === void 0 ? void 0 : stock.quantite) !== null && _b !== void 0 ? _b : 0;
 });
 exports.checkStock = checkStock;
 const checkStockHandler = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { type, produitId, quantite, pointVenteId } = req.body;
+    const { type, produitId, quantite, pointVenteId, regionId } = req.body;
     if (!type || !produitId || quantite == null) {
         res.status(400).json({ success: false, message: "Paramètres manquants" });
-        return;
+    }
+    if (regionId && pointVenteId) {
+        res.status(400).json({
+            success: false,
+            message: "Fournir soit regionId, soit pointVenteId, pas les deux.",
+        });
     }
     try {
-        const quantiteDisponible = yield (0, exports.checkStock)(type, produitId, pointVenteId);
-        console.log("quantiteDisponible:", quantiteDisponible);
+        const quantiteDisponible = yield (0, exports.checkStock)({
+            type,
+            produitId,
+            regionId,
+            pointVenteId,
+        });
         res.json({
             success: true,
             quantiteDisponible,
-            suffisant: quantiteDisponible >= quantite,
+            suffisant: quantiteDisponible >= Number(quantite),
         });
-        return;
     }
-    catch (error) {
-        console.error("Erreur API checkStock:", error);
+    catch (e) {
         res.status(500).json({ success: false, message: "Erreur serveur" });
-        return;
     }
 });
 exports.checkStockHandler = checkStockHandler;

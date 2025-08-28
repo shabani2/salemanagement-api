@@ -105,9 +105,7 @@ const updateCurrency = (req, res) => __awaiter(void 0, void 0, void 0, function*
         res.json(updated);
     }
     catch (err) {
-        res
-            .status(400)
-            .json({
+        res.status(400).json({
             message: "Erreur lors de la mise à jour",
             error: (_a = err.message) !== null && _a !== void 0 ? _a : err,
         });
@@ -176,9 +174,7 @@ const createExchangeRate = (req, res) => __awaiter(void 0, void 0, void 0, funct
             return;
         }
         if (String(baseCurrency) === String(targetCurrency)) {
-            res
-                .status(400)
-                .json({
+            res.status(400).json({
                 message: "La devise source et cible doivent être différentes",
             });
             return;
@@ -186,9 +182,7 @@ const createExchangeRate = (req, res) => __awaiter(void 0, void 0, void 0, funct
         if (expirationDate &&
             effectiveDate &&
             new Date(expirationDate) <= new Date(effectiveDate)) {
-            res
-                .status(400)
-                .json({
+            res.status(400).json({
                 message: "La date d'expiration doit être postérieure à la date d'effet",
             });
             return;
@@ -346,9 +340,7 @@ const updateFinancialSettings = (req, res) => __awaiter(void 0, void 0, void 0, 
         res.json(updated);
     }
     catch (err) {
-        res
-            .status(400)
-            .json({
+        res.status(400).json({
             message: "Erreur lors de la mise à jour",
             error: (_a = err.message) !== null && _a !== void 0 ? _a : err,
         });

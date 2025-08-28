@@ -11,6 +11,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.updateUser = exports.deleteUser = exports.getUsersByPointVente = exports.getUsersByRegion = exports.getAllUsers = void 0;
 const model_1 = require("../Models/model");
+const uploadService_1 = require("../services/uploadService");
 // Obtenir tous les utilisateurs (SuperAdmin seulement)
 const getAllUsers = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -107,11 +108,14 @@ const deleteUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
 });
 exports.deleteUser = deleteUser;
 // Mettre à jour son profil (Tous les utilisateurs)
-const updateUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const updateUser = (req, // Utilise le même type que register
+res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
     try {
         console.log("🔹 Requête reçue pour mise à jour", req.body);
-        console.log("🔹 ID utilisateur:", req.user.userId);
-        const { _id, nom, prenom, email, adresse, telephone, role, image, pointVente, region, } = req.body;
+        console.log("🔹 Fichier reçu:", req.file);
+        console.log("🔹 ID utilisateur:", (_a = req.user) === null || _a === void 0 ? void 0 : _a.userId);
+        const { _id, nom, prenom, email, adresse, telephone, role, pointVente, region, } = req.body;
         // Vérifier si l'utilisateur existe avant la mise à jour
         const user = yield model_1.User.findById(_id);
         if (!user) {
@@ -125,27 +129,39 @@ const updateUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
             updateFields.nom = nom;
         if (prenom)
             updateFields.prenom = prenom;
-        // if (email) updateFields.email = email;
         if (adresse)
             updateFields.adresse = adresse;
         if (role)
             updateFields.role = role;
-        if (image)
-            updateFields.image = image;
         if (pointVente)
             updateFields.pointVente = pointVente;
         if (region)
             updateFields.region = region;
+        // Gestion de l'image - MÊME LOGIQUE QUE DANS REGISTER
+        if (req.file) {
+            try {
+                // Upload de la nouvelle image avec le même rôle que register
+                const imagePath = yield (0, uploadService_1.uploadFile)(req.file, role || user.role);
+                updateFields.image = imagePath;
+                console.log("✅ Nouvelle image uploadée:", imagePath);
+            }
+            catch (uploadError) {
+                console.error("❌ Erreur d'upload:", uploadError);
+                res.status(500).json({ message: "Échec de l'upload de l'image" });
+                return;
+            }
+        }
+        // Si pas de nouveau fichier, on garde l'image existante (pas besoin de la modifier)
         // ✅ Vérifier uniquement si le numéro de téléphone a changé
         if (telephone && telephone !== user.telephone) {
             console.log("🔍 Vérification de l'unicité du numéro 1 = ", telephone);
             console.log("🔍 Vérification de l'unicité du numéro 2 = ", user.telephone);
-            //console.log("🔍 Vérification de l'unicité du numéro...");
-            const existingUser = (yield model_1.User.findOne({ telephone })) || (yield model_1.User.findOne({ email }));
-            //const existingUser = await User.findOne({ telephone });
+            const existingUser = yield model_1.User.findOne({
+                $or: [{ telephone }, { email: telephone }],
+            });
             // ❌ Bloquer seulement si un autre utilisateur a ce numéro
             if (existingUser && existingUser._id.toString() !== user._id.toString()) {
-                console.log("❌ Le numéro de téléphone ou l'amail est déjà utilisé");
+                console.log("❌ Le numéro de téléphone ou l'email est déjà utilisé");
                 res.status(400).json({
                     message: "Le numéro de téléphone ou l'email est déjà utilisé",
                 });

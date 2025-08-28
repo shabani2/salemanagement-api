@@ -7,6 +7,7 @@ const express_1 = __importDefault(require("express"));
 const auth_1 = require("../Middlewares/auth");
 const authorize_1 = require("../Middlewares/authorize");
 const userController_1 = require("../Controllers/userController");
+const upload_1 = require("../Middlewares/upload");
 const usersRouter = express_1.default.Router();
 usersRouter.delete("/:userId", auth_1.authenticate, (0, authorize_1.authorize)(["SuperAdmin", "AdminRegion", "AdminPointVente"]), userController_1.deleteUser);
 usersRouter.get("/:pointVenteId", auth_1.authenticate, (0, authorize_1.authorize)(["SuperAdmin", "AdminRegion", "AdminPointVente"]), userController_1.getUsersByPointVente);
@@ -20,5 +21,5 @@ usersRouter.get("/region", auth_1.authenticate, (0, authorize_1.authorize)(["Adm
 //   authorize(["AdminPointVente"]),
 //   getUsersByPointVente,
 // );
-usersRouter.put("/", auth_1.authenticate, userController_1.updateUser);
+usersRouter.put("/", upload_1.upload.single("image"), auth_1.authenticate, userController_1.updateUser);
 exports.default = usersRouter;

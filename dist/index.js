@@ -38,15 +38,25 @@ app.use(express_1.default.urlencoded({ limit: "20mb", extended: true }));
 //app.options("*", cors(corsOptions)); // Autoriser les préflight requests
 // Connexion à MongoDB
 (0, dbConnection_1.connectDB)();
-// Routes statiques pour les images des catégories
-app.use("/assets/categorie", express_1.default.static(path_1.default.join(__dirname, "assets/categorie")));
-app.use("/assets/SuperAdmin", express_1.default.static(path_1.default.join(__dirname, "assets/SuperAdmin")));
-app.use("/assets/AdminRegion", express_1.default.static(path_1.default.join(__dirname, "assets/AdminRegion")));
-app.use("/assets/AdminPointVente", express_1.default.static(path_1.default.join(__dirname, "assets/AdminPointVente")));
-app.use("/assets/Vendeur", express_1.default.static(path_1.default.join(__dirname, "assets/Vendeur")));
-app.use("/assets/Client", express_1.default.static(path_1.default.join(__dirname, "assets/Client")));
-app.use("/assets/Logisticien", express_1.default.static(path_1.default.join(__dirname, "assets/Logisticien")));
-app.use("/assets/organisations", express_1.default.static(path_1.default.join(__dirname, "assets/organisations")));
+//fonction statique pour exposer les fichier
+const ASSETS_SRC = path_1.default.resolve(process.cwd(), "src/assets");
+const ASSETS_ROOT = path_1.default.resolve(process.cwd(), "assets");
+function mountDualStatic(prefix, subdir) {
+    const fromSrc = path_1.default.join(ASSETS_SRC, subdir);
+    const fromRoot = path_1.default.join(ASSETS_ROOT, subdir);
+    // Essaye d'abord src/assets/<subdir>, puis fallback vers assets/<subdir>
+    app.use(prefix, express_1.default.static(fromSrc, { fallthrough: true }));
+    app.use(prefix, express_1.default.static(fromRoot));
+}
+// Exemple d'utilisation
+mountDualStatic("/assets/categorie", "categorie");
+mountDualStatic("/assets/SuperAdmin", "SuperAdmin");
+mountDualStatic("/assets/AdminRegion", "AdminRegion");
+mountDualStatic("/assets/AdminPointVente", "AdminPointVente");
+mountDualStatic("/assets/Vendeur", "Vendeur");
+mountDualStatic("/assets/Client", "Client");
+mountDualStatic("/assets/Logisticien", "Logisticien");
+mountDualStatic("/assets/organisations", "organisations");
 // Routes principales
 app.use("/auth", authRoutes_1.default);
 app.use("/user", userRoutes_1.default);

@@ -118,7 +118,10 @@ export const updateUser = async (
   try {
     console.log("🔹 Requête reçue pour mise à jour", req.body);
     console.log("🔹 Fichier reçu:", req.file);
-    console.log("🔹 ID utilisateur:", (req as AuthenticatedRequest).user?.userId);
+    console.log(
+      "🔹 ID utilisateur:",
+      (req as AuthenticatedRequest).user?.userId,
+    );
 
     const {
       _id,
@@ -169,10 +172,13 @@ export const updateUser = async (
     // ✅ Vérifier uniquement si le numéro de téléphone a changé
     if (telephone && telephone !== user.telephone) {
       console.log("🔍 Vérification de l'unicité du numéro 1 = ", telephone);
-      console.log("🔍 Vérification de l'unicité du numéro 2 = ", user.telephone);
-      
-      const existingUser = await User.findOne({ 
-        $or: [{ telephone }, { email: telephone }] 
+      console.log(
+        "🔍 Vérification de l'unicité du numéro 2 = ",
+        user.telephone,
+      );
+
+      const existingUser = await User.findOne({
+        $or: [{ telephone }, { email: telephone }],
       });
 
       // ❌ Bloquer seulement si un autre utilisateur a ce numéro
@@ -206,7 +212,9 @@ export const updateUser = async (
 
     if (!updatedUser) {
       console.log("❌ Échec de la mise à jour de l'utilisateur");
-      res.status(500).json({ message: "Échec de la mise à jour de l'utilisateur" });
+      res
+        .status(500)
+        .json({ message: "Échec de la mise à jour de l'utilisateur" });
       return;
     }
 

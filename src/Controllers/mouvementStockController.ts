@@ -1,4 +1,3 @@
-
 // Controllers/mouvementStockController.ts
 import { Request, Response } from "express";
 import mongoose, { PipelineStage } from "mongoose";
@@ -11,7 +10,10 @@ import {
 } from "../Models/model";
 
 // GET /mouvements/page
-export const getAllMouvementsStockPage = async (req: AuthedRequest, res: Response) => {
+export const getAllMouvementsStockPage = async (
+  req: AuthedRequest,
+  res: Response,
+) => {
   try {
     const page = parseIntSafe(req.query.page, 1);
     const limit = parseIntSafe(req.query.limit, 10);
@@ -27,7 +29,13 @@ export const getAllMouvementsStockPage = async (req: AuthedRequest, res: Respons
 
     // 2) stratégie
     if (mustUseAggregate(sortBy, q)) {
-      const pipeline = buildAggregatePipeline(match, { q, sortBy, order, skip, limit });
+      const pipeline = buildAggregatePipeline(match, {
+        q,
+        sortBy,
+        order,
+        skip,
+        limit,
+      });
       const result = await MouvementStock.aggregate(pipeline);
       const data = result?.[0]?.data ?? [];
       const total = (result?.[0]?.metadata?.[0]?.total as number) ?? 0;
@@ -41,14 +49,16 @@ export const getAllMouvementsStockPage = async (req: AuthedRequest, res: Respons
       MouvementStock.find(match)
         .sort({ [sortBy]: order })
         .skip(skip)
-        .limit(limit)
+        .limit(limit),
     );
 
     sendPaged(res, { total, page, limit, mouvements });
     return;
   } catch (err: any) {
     const status = err?.status ?? 500;
-    res.status(status).json({ message: "Erreur interne", error: err?.message ?? err });
+    res
+      .status(status)
+      .json({ message: "Erreur interne", error: err?.message ?? err });
     return;
   }
 };
@@ -60,7 +70,10 @@ export const getAllMouvementsStock = (req: AuthedRequest, res: Response) =>
 
 /* ------------------------------ PAR RÉGION ------------------------------- */
 // GET /mouvements/by-region/:regionId/page
-export const getMouvementStockByRegionPage = async (req: AuthedRequest, res: Response) => {
+export const getMouvementStockByRegionPage = async (
+  req: AuthedRequest,
+  res: Response,
+) => {
   try {
     const { regionId } = req.params;
     if (!regionId) return res.status(400).json({ message: "regionId requis" });
@@ -70,23 +83,25 @@ export const getMouvementStockByRegionPage = async (req: AuthedRequest, res: Res
 
     // proxy vers global avec filter region
     (req.query as any).region = regionId;
-     getAllMouvementsStockPage(req, res);
-     return
+    getAllMouvementsStockPage(req, res);
+    return;
   } catch (err: any) {
     const status = err?.status ?? 500;
-     res.status(status).json({ message: err?.message ?? "Erreur interne" });
-     return
+    res.status(status).json({ message: err?.message ?? "Erreur interne" });
+    return;
   }
 };
 
-
-
 /* --------------------------- PAR POINT DE VENTE --------------------------- */
 // GET /mouvements/by-point-vente/:pointVenteId/page
-export const getMouvementsStockByPointVentePage = async (req: AuthedRequest, res: Response) => {
+export const getMouvementsStockByPointVentePage = async (
+  req: AuthedRequest,
+  res: Response,
+) => {
   try {
     const { pointVenteId } = req.params;
-    if (!pointVenteId) return res.status(400).json({ message: "pointVenteId requis" });
+    if (!pointVenteId)
+      return res.status(400).json({ message: "pointVenteId requis" });
 
     // Sécurité d’accès
     await assertCanAccessPointVente(req, pointVenteId);
@@ -97,13 +112,10 @@ export const getMouvementsStockByPointVentePage = async (req: AuthedRequest, res
     return;
   } catch (err: any) {
     const status = err?.status ?? 500;
-     res.status(status).json({ message: err?.message ?? "Erreur interne" });
-     return;
+    res.status(status).json({ message: err?.message ?? "Erreur interne" });
+    return;
   }
 };
-
-
-
 
 /* --------------------------- AGRÉGATIONS (OK) ----------------------------- */
 /* Tu peux laisser tes deux agrégations existantes ci-dessous.
@@ -112,115 +124,6 @@ export const getMouvementsStockByPointVentePage = async (req: AuthedRequest, res
    avant d’exécuter la pipeline, comme je l’ai fait sur les endpoints “by-*”. */
 
 //integration de la pagination
-
-
-
-export const getMouvementStockByIdPage = async (
-  req: Request,
-  res: Response,
-) => {
-  try {
-    const { id } = req.params;
-    const mouvement = await MouvementStock.findById(id)
-      .populate({
-        path: "pointVente",
-        populate: { path: "region", model: "Region" },
-      })
-      .populate({
-        path: "produit",
-        populate: { path: "categorie", model: "Categorie" },
-      })
-      .populate("region")
-      .populate({
-        path: "user",
-        populate: [
-          { path: "pointVente", model: "PointVente" },
-          { path: "region", model: "Region" },
-        ],
-      });
-
-    if (!mouvement) {
-      res.status(404).json({ message: "Mouvement non trouvé" });
-      return;
-    }
-
-    // Pas de pagination pour une entité unique
-    res.json(mouvement);
-  } catch (err) {
-    res.status(500).json({ message: "Erreur interne", error: err });
-  }
-};
-
-// Nouvelle fonction avec pagination pour les mouvements par région (version optimisée)
-export const getMouvementsStockByRegionOptimizedPage = async (
-  req: Request,
-  res: Response,
-) => {
-  try {
-    const { regionId } = req.params;
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = 10;
-    const skip = (page - 1) * limit;
-
-    // Trouver tous les points de vente dans la région
-    const pointVentes = await PointVente.find({ region: regionId });
-    const pointVenteIds = pointVentes.map((pv) => pv._id);
-
-    // Requête unique avec $or
-    const query = {
-      $or: [{ region: regionId }, { pointVente: { $in: pointVenteIds } }],
-    };
-
-    const total = await MouvementStock.countDocuments(query);
-
-    const mouvements = await MouvementStock.find(query)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .populate("region")
-      .populate({
-        path: "pointVente",
-        populate: { path: "region", model: "Region" },
-      })
-      .populate({
-        path: "produit",
-        populate: { path: "categorie", model: "Categorie" },
-      })
-      .populate({
-        path: "user",
-        populate: [
-          { path: "pointVente", model: "PointVente" },
-          { path: "region", model: "Region" },
-        ],
-      });
-
-    res.json({
-      total,
-      page,
-      pages: Math.ceil(total / limit),
-      limit,
-      mouvements,
-    });
-  } catch (err) {
-    console.error("Erreur dans getMouvementStockByRegionOptimized:", err);
-    res
-      .status(500)
-      .json({ message: "Erreur interne", error: (err as any)?.message });
-  }
-};
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 /* -------------------------------------------------------------------------- */
 /*                                   Helpers                                  */
@@ -299,11 +202,16 @@ function applyBusinessFilters(base: any, req: AuthedRequest) {
   if (typeof depot === "boolean") out.depotCentral = depot;
 
   // Date range (createdAt)
-  const dateFrom = req.query.dateFrom ? new Date(String(req.query.dateFrom)) : undefined;
-  const dateTo = req.query.dateTo ? new Date(String(req.query.dateTo)) : undefined;
+  const dateFrom = req.query.dateFrom
+    ? new Date(String(req.query.dateFrom))
+    : undefined;
+  const dateTo = req.query.dateTo
+    ? new Date(String(req.query.dateTo))
+    : undefined;
   if (dateFrom || dateTo) {
     out.createdAt = {};
-    if (dateFrom && !Number.isNaN(+dateFrom)) (out.createdAt as any).$gte = dateFrom;
+    if (dateFrom && !Number.isNaN(+dateFrom))
+      (out.createdAt as any).$gte = dateFrom;
     if (dateTo && !Number.isNaN(+dateTo)) (out.createdAt as any).$lte = dateTo;
   }
   return out;
@@ -313,11 +221,20 @@ function applyBusinessFilters(base: any, req: AuthedRequest) {
 function populateAll(q: any) {
   return q
     .populate("region")
-    .populate({ path: "pointVente", populate: { path: "region", model: "Region" } })
-    .populate({ path: "produit", populate: { path: "categorie", model: "Categorie" } })
+    .populate({
+      path: "pointVente",
+      populate: { path: "region", model: "Region" },
+    })
+    .populate({
+      path: "produit",
+      populate: { path: "categorie", model: "Categorie" },
+    })
     .populate({
       path: "user",
-      populate: [{ path: "pointVente", model: "PointVente" }, { path: "region", model: "Region" }],
+      populate: [
+        { path: "pointVente", model: "PointVente" },
+        { path: "region", model: "Region" },
+      ],
     });
 }
 
@@ -331,11 +248,16 @@ async function assertCanAccessRegion(req: AuthedRequest, regionId: string) {
 }
 
 /** Vérifie accès à un PV pour non-SuperAdmin. */
-async function assertCanAccessPointVente(req: AuthedRequest, pointVenteId: string) {
+async function assertCanAccessPointVente(
+  req: AuthedRequest,
+  pointVenteId: string,
+) {
   if (isSuperAdmin(req)) return;
   const userPV = toId((req.user as any)?.pointVente);
   const userRG = toId((req.user as any)?.region);
-  const pv: any = await PointVente.findById(toId(pointVenteId)).select("region").lean();
+  const pv: any = await PointVente.findById(toId(pointVenteId))
+    .select("region")
+    .lean();
   if (!pv) throw { status: 404, message: "Point de vente introuvable." };
 
   if (userPV && String(userPV) === String(pv._id)) return; // AdminPointVente
@@ -361,22 +283,80 @@ function mustUseAggregate(sortBy?: string, q?: string) {
 /** Pipeline aggregate (recherche sur produit.nom + tri nested). */
 function buildAggregatePipeline(
   match: any,
-  { q, sortBy, order, skip, limit }: { q?: string; sortBy?: string; order: 1 | -1; skip: number; limit: number }
+  {
+    q,
+    sortBy,
+    order,
+    skip,
+    limit,
+  }: {
+    q?: string;
+    sortBy?: string;
+    order: 1 | -1;
+    skip: number;
+    limit: number;
+  },
 ): PipelineStage[] {
   const pipeline: PipelineStage[] = [{ $match: match }];
 
   pipeline.push(
-    { $lookup: { from: "produits", localField: "produit", foreignField: "_id", as: "produit" } },
+    {
+      $lookup: {
+        from: "produits",
+        localField: "produit",
+        foreignField: "_id",
+        as: "produit",
+      },
+    },
     { $unwind: "$produit" },
-    { $lookup: { from: "categories", localField: "produit.categorie", foreignField: "_id", as: "produit.categorie" } },
-    { $unwind: { path: "$produit.categorie", preserveNullAndEmptyArrays: true } },
-    { $lookup: { from: "regions", localField: "region", foreignField: "_id", as: "region" } },
+    {
+      $lookup: {
+        from: "categories",
+        localField: "produit.categorie",
+        foreignField: "_id",
+        as: "produit.categorie",
+      },
+    },
+    {
+      $unwind: { path: "$produit.categorie", preserveNullAndEmptyArrays: true },
+    },
+    {
+      $lookup: {
+        from: "regions",
+        localField: "region",
+        foreignField: "_id",
+        as: "region",
+      },
+    },
     { $unwind: { path: "$region", preserveNullAndEmptyArrays: true } },
-    { $lookup: { from: "pointventes", localField: "pointVente", foreignField: "_id", as: "pointVente" } },
+    {
+      $lookup: {
+        from: "pointventes",
+        localField: "pointVente",
+        foreignField: "_id",
+        as: "pointVente",
+      },
+    },
     { $unwind: { path: "$pointVente", preserveNullAndEmptyArrays: true } },
-    { $lookup: { from: "regions", localField: "pointVente.region", foreignField: "_id", as: "pointVente.region" } },
-    { $unwind: { path: "$pointVente.region", preserveNullAndEmptyArrays: true } },
-    { $lookup: { from: "users", localField: "user", foreignField: "_id", as: "user" } },
+    {
+      $lookup: {
+        from: "regions",
+        localField: "pointVente.region",
+        foreignField: "_id",
+        as: "pointVente.region",
+      },
+    },
+    {
+      $unwind: { path: "$pointVente.region", preserveNullAndEmptyArrays: true },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "user",
+        foreignField: "_id",
+        as: "user",
+      },
+    },
     { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
   );
 
@@ -400,7 +380,12 @@ function buildAggregatePipeline(
 /** Réponse paginée standard (void) */
 function sendPaged(
   res: Response,
-  { total, page, limit, mouvements }: { total: number; page: number; limit: number; mouvements: any[] }
+  {
+    total,
+    page,
+    limit,
+    mouvements,
+  }: { total: number; page: number; limit: number; mouvements: any[] },
 ): void {
   res.json({
     total,
@@ -414,7 +399,10 @@ function sendPaged(
 /* -------------------------------------------------------------------------- */
 /*                                   ROUTES                                   */
 
-export const getMouvementStockById = async (req: AuthedRequest, res: Response): Promise<void> => {
+export const getMouvementStockById = async (
+  req: AuthedRequest,
+  res: Response,
+): Promise<void> => {
   try {
     const { id } = req.params;
     const mv: any = await populateAll(MouvementStock.findById(id));
@@ -426,9 +414,10 @@ export const getMouvementStockById = async (req: AuthedRequest, res: Response): 
     // contrôle d’accès au doc isolé
     const scope = buildScope(req);
     if (
-      (!isSuperAdmin(req)) &&
+      !isSuperAdmin(req) &&
       !(
-        (scope.pointVente && String(scope.pointVente) === String(mv.pointVente?._id)) ||
+        (scope.pointVente &&
+          String(scope.pointVente) === String(mv.pointVente?._id)) ||
         (scope.region && String(scope.region) === String(mv.region?._id)) ||
         (scope.user && String(scope.user) === String(mv.user?._id))
       )
@@ -447,7 +436,10 @@ export const getMouvementStockById = async (req: AuthedRequest, res: Response): 
 
 /* --------------------------- PAR POINT DE VENTE --------------------------- */
 // GET "/by-point-vente/:pointVenteId"  (legacy non paginé → on renvoie paginé qd même)
-export const getMouvementsStockByPointVente = async (req: AuthedRequest, res: Response): Promise<void> => {
+export const getMouvementsStockByPointVente = async (
+  req: AuthedRequest,
+  res: Response,
+): Promise<void> => {
   try {
     const { pointVenteId } = req.params;
     if (!pointVenteId) {
@@ -460,13 +452,18 @@ export const getMouvementsStockByPointVente = async (req: AuthedRequest, res: Re
     await getAllMouvementsStock(req, res);
     return;
   } catch (err: any) {
-    res.status(err?.status ?? 500).json({ message: err?.message ?? "Erreur interne" });
+    res
+      .status(err?.status ?? 500)
+      .json({ message: err?.message ?? "Erreur interne" });
     return;
   }
 };
 
 // GET "/by-point-vente/page/:pointVenteId" (paginé)
-export const getMouvementsStockByPointVenteId = async (req: AuthedRequest, res: Response): Promise<void> => {
+export const getMouvementsStockByPointVenteId = async (
+  req: AuthedRequest,
+  res: Response,
+): Promise<void> => {
   try {
     const { pointVenteId } = req.params;
     if (!pointVenteId) {
@@ -479,34 +476,143 @@ export const getMouvementsStockByPointVenteId = async (req: AuthedRequest, res: 
     await getAllMouvementsStock(req, res);
     return;
   } catch (err: any) {
-    res.status(err?.status ?? 500).json({ message: err?.message ?? "Erreur interne" });
+    res
+      .status(err?.status ?? 500)
+      .json({ message: err?.message ?? "Erreur interne" });
     return;
   }
 };
 
 /* ----------------------------------- RÉGION -------------------------------- */
 // GET "/region/:regionId"
-export const getMouvementStockByRegion = async (req: AuthedRequest, res: Response): Promise<void> => {
+// petit helper pour parser les bools depuis la query
+const toBool = (v: unknown, def = false) =>
+  v === true || v === "true" || v === "1"
+    ? true
+    : v === false || v === "false" || v === "0"
+      ? false
+      : def;
+
+export const getMouvementStockByRegion = async (
+  req: AuthedRequest,
+  res: Response,
+): Promise<void> => {
   try {
     const { regionId } = req.params;
-    if (!regionId) {
-      res.status(400).json({ message: "regionId requis" });
+    if (!regionId || !mongoose.isValidObjectId(regionId)) {
+      res.status(400).json({ message: "regionId requis ou invalide" });
       return;
     }
+
+    // Autorisation : l'utilisateur peut-il accéder à cette région ?
     await assertCanAccessRegion(req, regionId);
 
-    (req.query as any).region = regionId;
-    await getAllMouvementsStock(req, res);
+    // --- pagination & tri ---
+    const page = Math.max(parseInt(String(req.query.page ?? "1"), 10) || 1, 1);
+    const limit = Math.min(
+      Math.max(parseInt(String(req.query.limit ?? "20"), 10) || 20, 1),
+      200,
+    ); // borne haute pour éviter les abus
+    const skip = (page - 1) * limit;
+
+    const sortBy = (req.query.sortBy as string) || "createdAt";
+    const order =
+      ((req.query.order as string) || "desc").toLowerCase() === "asc" ? 1 : -1;
+
+    const includeRefs = toBool(req.query.includeRefs, true);
+    const includeTotal = toBool(req.query.includeTotal, false);
+
+    // --- autres filtres éventuels (dates, type, produit, user, etc.) ---
+    // On reconstruit un filtre "neutre" depuis la query en ignorant 'region' et 'pointVente'
+    // pour éviter de casser la logique OR qu'on va ajouter.
+    const baseFilter: Record<string, any> = {};
+
+    // Exemple de filtres usuels (adapte selon ton buildFilter si tu en as un)
+    if (req.query.type) baseFilter.type = req.query.type;
+    if (req.query.produit) {
+      const pid = String(req.query.produit);
+      if (mongoose.isValidObjectId(pid))
+        baseFilter.produit = new mongoose.Types.ObjectId(pid);
+    }
+    // Filtre par période (createdAt)
+    const createdAt: any = {};
+    if (req.query.dateFrom)
+      createdAt.$gte = new Date(String(req.query.dateFrom));
+    if (req.query.dateTo) createdAt.$lte = new Date(String(req.query.dateTo));
+    if (Object.keys(createdAt).length) baseFilter.createdAt = createdAt;
+
+    // --- récupère les PV de la région ---
+    const pointVenteIds: mongoose.Types.ObjectId[] = await PointVente.find({
+      region: new mongoose.Types.ObjectId(regionId),
+    }).distinct("_id");
+
+    // --- filtre final: mouvements dont region == regionId OU pointVente ∈ PV(regionId) ---
+    const regionOrPVFilter = {
+      $or: [
+        { region: new mongoose.Types.ObjectId(regionId) },
+        { pointVente: { $in: pointVenteIds } },
+      ],
+    };
+
+    const finalFilter = { $and: [baseFilter, regionOrPVFilter] };
+
+    // --- requête ---
+    let query = MouvementStock.find(finalFilter)
+      .sort({ [sortBy]: order })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    if (includeRefs) {
+      query = query
+        .populate({
+          path: "produit",
+          populate: { path: "categorie", model: "Categorie" },
+        })
+        .populate({
+          path: "pointVente",
+          populate: { path: "region", model: "Region" },
+        })
+        .populate("region")
+        .populate("user")
+        .populate("commandeId");
+    }
+
+    const execList = query.exec();
+    const execCount = includeTotal
+      ? MouvementStock.countDocuments(finalFilter)
+      : null;
+
+    const [items, total] = await Promise.all([execList, execCount]);
+
+    if (includeTotal) {
+      res.json({
+        items,
+        total,
+        page,
+        limit,
+        sortBy,
+        order: order === 1 ? "asc" : "desc",
+      });
+      return;
+    }
+
+    res.json(items);
     return;
   } catch (err: any) {
-    res.status(err?.status ?? 500).json({ message: err?.message ?? "Erreur interne" });
+    res
+      .status(err?.status ?? 500)
+      .json({ message: err?.message ?? "Erreur interne" });
     return;
   }
 };
 
 /* ----------------------------------- USER --------------------------------- */
 // GET "/byUser/:userId"
-export const getMouvementsStockByUserId = async (req: AuthedRequest, res: Response): Promise<void> => {
+export const getMouvementsStockByUserId = async (
+  req: AuthedRequest,
+  res: Response,
+): Promise<void> => {
   try {
     const { userId } = req.params;
     if (!userId) {
@@ -519,14 +625,19 @@ export const getMouvementsStockByUserId = async (req: AuthedRequest, res: Respon
     await getAllMouvementsStock(req, res);
     return;
   } catch (err: any) {
-    res.status(err?.status ?? 500).json({ message: err?.message ?? "Erreur interne" });
+    res
+      .status(err?.status ?? 500)
+      .json({ message: err?.message ?? "Erreur interne" });
     return;
   }
 };
 
 /* ----------------------------- CREATE / UPDATE ---------------------------- */
 // POST "/"
-export const createMouvementStock = async (req: AuthedRequest, res: Response): Promise<void> => {
+export const createMouvementStock = async (
+  req: AuthedRequest,
+  res: Response,
+): Promise<void> => {
   try {
     const {
       pointVente,
@@ -545,7 +656,12 @@ export const createMouvementStock = async (req: AuthedRequest, res: Response): P
     const hasDC = depotCentral === true;
 
     if (!hasPV && !hasRG && !hasDC) {
-      res.status(400).json({ message: "Associer un point de vente, une région ou le dépôt central." });
+      res
+        .status(400)
+        .json({
+          message:
+            "Associer un point de vente, une région ou le dépôt central.",
+        });
       return;
     }
     if (!user) {
@@ -570,13 +686,21 @@ export const createMouvementStock = async (req: AuthedRequest, res: Response): P
     res.status(201).json(populated);
     return;
   } catch (err: any) {
-    res.status(400).json({ message: "Erreur lors de la création", error: err?.message ?? err });
+    res
+      .status(400)
+      .json({
+        message: "Erreur lors de la création",
+        error: err?.message ?? err,
+      });
     return;
   }
 };
 
 // PUT "/:id"
-export const updateMouvementStock = async (req: AuthedRequest, res: Response): Promise<void> => {
+export const updateMouvementStock = async (
+  req: AuthedRequest,
+  res: Response,
+): Promise<void> => {
   try {
     const { id } = req.params;
     const {
@@ -596,7 +720,12 @@ export const updateMouvementStock = async (req: AuthedRequest, res: Response): P
     const hasDC = depotCentral === true;
 
     if (!hasPV && !hasRG && !hasDC) {
-      res.status(400).json({ message: "Associer un point de vente, une région ou le dépôt central." });
+      res
+        .status(400)
+        .json({
+          message:
+            "Associer un point de vente, une région ou le dépôt central.",
+        });
       return;
     }
     if (!user) {
@@ -617,7 +746,7 @@ export const updateMouvementStock = async (req: AuthedRequest, res: Response): P
     if (region) updateData.region = toId(region);
 
     const updated = await populateAll(
-      MouvementStock.findByIdAndUpdate(id, updateData, { new: true })
+      MouvementStock.findByIdAndUpdate(id, updateData, { new: true }),
     );
     if (!updated) {
       res.status(404).json({ message: "Mouvement non trouvé" });
@@ -626,13 +755,21 @@ export const updateMouvementStock = async (req: AuthedRequest, res: Response): P
     res.json(updated);
     return;
   } catch (err: any) {
-    res.status(400).json({ message: "Erreur lors de la mise à jour", error: err?.message ?? err });
+    res
+      .status(400)
+      .json({
+        message: "Erreur lors de la mise à jour",
+        error: err?.message ?? err,
+      });
     return;
   }
 };
 
 // DELETE "/:id"
-export const deleteMouvementStock = async (req: AuthedRequest, res: Response): Promise<void> => {
+export const deleteMouvementStock = async (
+  req: AuthedRequest,
+  res: Response,
+): Promise<void> => {
   try {
     const { id } = req.params;
     await MouvementStock.findByIdAndDelete(id);
@@ -645,11 +782,14 @@ export const deleteMouvementStock = async (req: AuthedRequest, res: Response): P
 };
 
 // PUT "/validate/:id"
-export const validateState = async (req: AuthedRequest, res: Response): Promise<void> => {
+export const validateState = async (
+  req: AuthedRequest,
+  res: Response,
+): Promise<void> => {
   try {
     const { id } = req.params;
     const mouvement = await populateAll(
-      MouvementStock.findByIdAndUpdate(id, { statut: true }, { new: true })
+      MouvementStock.findByIdAndUpdate(id, { statut: true }, { new: true }),
     );
     if (!mouvement) {
       res.status(404).json({ message: "Mouvement non trouvé" });
@@ -658,7 +798,9 @@ export const validateState = async (req: AuthedRequest, res: Response): Promise<
     res.json({ message: "Statut du mouvement mis à jour", mouvement });
     return;
   } catch (err) {
-    res.status(500).json({ message: "Erreur lors de la validation", error: err });
+    res
+      .status(500)
+      .json({ message: "Erreur lors de la validation", error: err });
     return;
   }
 };
@@ -714,7 +856,9 @@ export const getMouvementsStockAggregatedByUserId = async (
     const total = metadata.length > 0 ? metadata[0].total : 0;
 
     if (!data.length) {
-      res.status(404).json({ message: "Aucun mouvement trouvé pour cet utilisateur" });
+      res
+        .status(404)
+        .json({ message: "Aucun mouvement trouvé pour cet utilisateur" });
       return;
     }
 
@@ -845,7 +989,10 @@ export const getMouvementsStockAggregatedByPointVente = async (
 
 /* ------------------------------ Livraison --------------------------------- */
 // POST Livraison (utilisé par une autre route si besoin)
-export const livrerProduitCommande = async (req: Request, res: Response): Promise<void> => {
+export const livrerProduitCommande = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
   try {
     const {
       commandeId,
@@ -928,7 +1075,9 @@ export const livrerProduitCommande = async (req: Request, res: Response): Promis
     await produitCommande.save();
 
     // Vérification globale de la commande
-    const produitsCommande = await CommandeProduit.find({ commande: commandeId });
+    const produitsCommande = await CommandeProduit.find({
+      commande: commandeId,
+    });
     const tousLivres = produitsCommande.every((p) => p.statut === "livré");
     if (tousLivres) {
       commande.statut = "livrée";
@@ -940,7 +1089,10 @@ export const livrerProduitCommande = async (req: Request, res: Response): Promis
       .populate("commandeId")
       .populate("user")
       .populate("region")
-      .populate({ path: "pointVente", populate: { path: "region", model: "Region" } });
+      .populate({
+        path: "pointVente",
+        populate: { path: "region", model: "Region" },
+      });
 
     res.status(201).json({
       message: "Produit livré avec succès.",
