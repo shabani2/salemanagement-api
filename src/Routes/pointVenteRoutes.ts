@@ -7,6 +7,7 @@ import {
   getAllPointVentes,
   getPointVenteById,
   getPointVentesByRegion,
+  searchPointVentes,
   updatePointVente,
 } from "../Controllers/pointVenteController";
 
@@ -17,6 +18,12 @@ pointVenteRoutes.get(
   authenticate,
   // authorize(["SuperAdmin", "AdminRegion"]),
   getAllPointVentes,
+);
+pointVenteRoutes.get(
+  "/search",
+  authenticate,
+  // authorize(["SuperAdmin", "AdminRegion"]),
+  searchPointVentes,
 );
 
 pointVenteRoutes.post(

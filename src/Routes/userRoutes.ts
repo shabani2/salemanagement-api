@@ -40,10 +40,10 @@ usersRouter.get(
   getUsersByRegion,
 );
 // usersRouter.get(
-//   "/point-vente",
+//   "/search",
 //   authenticate,
-//   authorize(["AdminPointVente"]),
-//   getUsersByPointVente,
+//   // authorize(["AdminPointVente"]),
+//   search,
 // );
 usersRouter.put("/", upload.single("image"), authenticate, updateUser);
 

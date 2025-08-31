@@ -6,8 +6,9 @@ import {
   deleteRegion,
   getAllRegions,
   getRegionById,
+  searchRegions,
   updateRegion,
-} from "../Controllers/regionController";
+} from "../Controllers/regionController"; ///regions/search
 
 const router = express.Router();
 
@@ -16,6 +17,12 @@ router.get(
   authenticate,
   authorize(["SuperAdmin", "AdminRegion"]),
   getAllRegions,
+);
+router.get(
+  "/search",
+  authenticate,
+  authorize(["SuperAdmin", "AdminRegion"]),
+  searchRegions,
 );
 router.post(
   "/",
