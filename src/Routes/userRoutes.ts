@@ -19,7 +19,7 @@ usersRouter.delete(
   deleteUser,
 );
 usersRouter.get(
-  "/:pointVenteId",
+  "/pointvente/:pointVenteId",
   authenticate,
   authorize(["SuperAdmin", "AdminRegion", "AdminPointVente"]),
   getUsersByPointVente,
