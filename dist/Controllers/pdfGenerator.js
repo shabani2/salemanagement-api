@@ -179,11 +179,11 @@ const generateStockPdf = (req, res) => __awaiter(void 0, void 0, void 0, functio
             doc.fillColor("#333").fontSize(FS.small);
             let ty = by + (isPOS ? 4 : 6);
             if (organisation === null || organisation === void 0 ? void 0 : organisation.idNat) {
-                doc.text(`idNat : ${organisation.idNat}`, bx + 8, ty);
+                doc.text(`ID Nat : ${organisation.idNat}`, bx + 8, ty);
                 ty = doc.y;
             }
             if (organisation === null || organisation === void 0 ? void 0 : organisation.numeroImpot)
-                doc.text(`TVA : ${organisation.numeroImpot}`, bx + 8, ty);
+                doc.text(`Numero Impot : ${organisation.numeroImpot}`, bx + 8, ty);
             doc.fillColor("black");
             y = by + (isPOS ? 26 : 36);
         }

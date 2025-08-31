@@ -6,9 +6,10 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const auth_1 = require("../Middlewares/auth");
 const authorize_1 = require("../Middlewares/authorize");
-const regionController_1 = require("../Controllers/regionController");
+const regionController_1 = require("../Controllers/regionController"); ///regions/search
 const router = express_1.default.Router();
 router.get("/", auth_1.authenticate, (0, authorize_1.authorize)(["SuperAdmin", "AdminRegion"]), regionController_1.getAllRegions);
+router.get("/search", auth_1.authenticate, (0, authorize_1.authorize)(["SuperAdmin", "AdminRegion"]), regionController_1.searchRegions);
 router.post("/", auth_1.authenticate, (0, authorize_1.authorize)(["SuperAdmin", "AdminRegion"]), regionController_1.createRegion);
 router.delete("/:id", auth_1.authenticate, (0, authorize_1.authorize)(["SuperAdmin", "AdminRegion"]), regionController_1.deleteRegion);
 router.put("/:id", auth_1.authenticate, (0, authorize_1.authorize)(["SuperAdmin", "AdminRegion"]), regionController_1.updateRegion);

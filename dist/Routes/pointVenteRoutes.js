@@ -11,6 +11,9 @@ const pointVenteRoutes = express_1.default.Router();
 pointVenteRoutes.get("/", auth_1.authenticate, 
 // authorize(["SuperAdmin", "AdminRegion"]),
 pointVenteController_1.getAllPointVentes);
+pointVenteRoutes.get("/search", auth_1.authenticate, 
+// authorize(["SuperAdmin", "AdminRegion"]),
+pointVenteController_1.searchPointVentes);
 pointVenteRoutes.post("/", auth_1.authenticate, (0, authorize_1.authorize)(["SuperAdmin", "AdminRegion"]), pointVenteController_1.createPointVente);
 pointVenteRoutes.get("/region/:regionId", auth_1.authenticate, pointVenteController_1.getPointVentesByRegion);
 pointVenteRoutes.delete("/:id", auth_1.authenticate, (0, authorize_1.authorize)(["SuperAdmin", "AdminRegion"]), pointVenteController_1.deletePointVente);

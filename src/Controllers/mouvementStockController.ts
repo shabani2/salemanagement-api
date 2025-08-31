@@ -656,12 +656,9 @@ export const createMouvementStock = async (
     const hasDC = depotCentral === true;
 
     if (!hasPV && !hasRG && !hasDC) {
-      res
-        .status(400)
-        .json({
-          message:
-            "Associer un point de vente, une région ou le dépôt central.",
-        });
+      res.status(400).json({
+        message: "Associer un point de vente, une région ou le dépôt central.",
+      });
       return;
     }
     if (!user) {
@@ -686,12 +683,10 @@ export const createMouvementStock = async (
     res.status(201).json(populated);
     return;
   } catch (err: any) {
-    res
-      .status(400)
-      .json({
-        message: "Erreur lors de la création",
-        error: err?.message ?? err,
-      });
+    res.status(400).json({
+      message: "Erreur lors de la création",
+      error: err?.message ?? err,
+    });
     return;
   }
 };
@@ -720,12 +715,9 @@ export const updateMouvementStock = async (
     const hasDC = depotCentral === true;
 
     if (!hasPV && !hasRG && !hasDC) {
-      res
-        .status(400)
-        .json({
-          message:
-            "Associer un point de vente, une région ou le dépôt central.",
-        });
+      res.status(400).json({
+        message: "Associer un point de vente, une région ou le dépôt central.",
+      });
       return;
     }
     if (!user) {
@@ -755,12 +747,10 @@ export const updateMouvementStock = async (
     res.json(updated);
     return;
   } catch (err: any) {
-    res
-      .status(400)
-      .json({
-        message: "Erreur lors de la mise à jour",
-        error: err?.message ?? err,
-      });
+    res.status(400).json({
+      message: "Erreur lors de la mise à jour",
+      error: err?.message ?? err,
+    });
     return;
   }
 };

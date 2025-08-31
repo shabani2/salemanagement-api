@@ -546,9 +546,7 @@ const createMouvementStock = (req, res) => __awaiter(void 0, void 0, void 0, fun
         const hasRG = !!region;
         const hasDC = depotCentral === true;
         if (!hasPV && !hasRG && !hasDC) {
-            res
-                .status(400)
-                .json({
+            res.status(400).json({
                 message: "Associer un point de vente, une région ou le dépôt central.",
             });
             return;
@@ -576,9 +574,7 @@ const createMouvementStock = (req, res) => __awaiter(void 0, void 0, void 0, fun
         return;
     }
     catch (err) {
-        res
-            .status(400)
-            .json({
+        res.status(400).json({
             message: "Erreur lors de la création",
             error: (_a = err === null || err === void 0 ? void 0 : err.message) !== null && _a !== void 0 ? _a : err,
         });
@@ -596,9 +592,7 @@ const updateMouvementStock = (req, res) => __awaiter(void 0, void 0, void 0, fun
         const hasRG = !!region;
         const hasDC = depotCentral === true;
         if (!hasPV && !hasRG && !hasDC) {
-            res
-                .status(400)
-                .json({
+            res.status(400).json({
                 message: "Associer un point de vente, une région ou le dépôt central.",
             });
             return;
@@ -629,9 +623,7 @@ const updateMouvementStock = (req, res) => __awaiter(void 0, void 0, void 0, fun
         return;
     }
     catch (err) {
-        res
-            .status(400)
-            .json({
+        res.status(400).json({
             message: "Erreur lors de la mise à jour",
             error: (_a = err === null || err === void 0 ? void 0 : err.message) !== null && _a !== void 0 ? _a : err,
         });

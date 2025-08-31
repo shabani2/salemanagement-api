@@ -246,11 +246,11 @@ export const generateStockPdf = async (req: Request, res: Response) => {
       doc.fillColor("#333").fontSize(FS.small);
       let ty = by + (isPOS ? 4 : 6);
       if (organisation?.idNat) {
-        doc.text(`idNat : ${organisation.idNat}`, bx + 8, ty);
+        doc.text(`ID Nat : ${organisation.idNat}`, bx + 8, ty);
         ty = doc.y;
       }
       if (organisation?.numeroImpot)
-        doc.text(`TVA : ${organisation.numeroImpot}`, bx + 8, ty);
+        doc.text(`Numero Impot : ${organisation.numeroImpot}`, bx + 8, ty);
       doc.fillColor("black");
       y = by + (isPOS ? 26 : 36);
     } else {

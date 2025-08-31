@@ -12,12 +12,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.checkStockHandler = exports.checkStock = exports.deleteStock = exports.updateStock = exports.createStock = exports.getStockById = exports.getStocksByPointVente = exports.getStocksByRegion = exports.getAllStocks = void 0;
 const model_1 = require("../Models/model");
 const mongoose_1 = require("mongoose");
-// 🔹 Obtenir tous les stocks
-/** ===========================================================
- * Helpers: tri + déduplication côté serveur
- * - Key = produitId | (pointVenteId || regionId || DEPOT_CENTRAL)
- * - On présuppose un tri DESC sur updatedAt/createdAt pour garder le 1er vu
- * =========================================================== */
 const getIdStr = (v) => {
     var _a, _b, _c, _d;
     if (!v)
@@ -257,46 +251,64 @@ const deleteStock = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     }
 });
 exports.deleteStock = deleteStock;
-const checkStock = (_a) => __awaiter(void 0, [_a], void 0, function* ({ type, produitId, regionId, pointVenteId, }) {
+const checkStock = (_a) => __awaiter(void 0, [_a], void 0, function* ({ type, produitId, regionId, pointVenteId, depotCentral, }) {
     var _b;
     if (!mongoose_1.Types.ObjectId.isValid(produitId))
         return 0;
-    if (pointVenteId && !mongoose_1.Types.ObjectId.isValid(pointVenteId))
-        return 0;
     if (regionId && !mongoose_1.Types.ObjectId.isValid(regionId))
         return 0;
+    if (pointVenteId && !mongoose_1.Types.ObjectId.isValid(pointVenteId))
+        return 0;
+    // exclusivité : si central est explicitement demandé, on ignore PV/region
+    if (depotCentral && (regionId || pointVenteId)) {
+        // incohérent : l'appelant doit choisir UNE portée
+        return 0;
+    }
     const query = { produit: produitId };
-    // ✅ Priorité aux portées locales
-    if (regionId) {
+    if (depotCentral === true) {
+        // ✅ portée centrale explicite
+        query.depotCentral = true;
+    }
+    else if (regionId) {
+        // ✅ portée régionale (on exclut central)
         query.region = regionId;
-        // on exclut explicitement le dépôt central
         query.depotCentral = { $ne: true };
     }
     else if (pointVenteId) {
+        // ✅ portée PV (on exclut central)
         query.pointVente = pointVenteId;
         query.depotCentral = { $ne: true };
     }
-    else if (type === "Livraison") {
-        // ✅ seulement si aucune portée n’est donnée
+    else if (type === 'Livraison') {
+        // ✅ fallback livraison -> central si rien n’est spécifié
         query.depotCentral = true;
     }
     else {
-        // cas incohérent : pas de portée et pas de livraison
+        // ❌ pas de portée exploitable
         return 0;
     }
-    const stock = yield model_1.Stock.findOne(query);
-    return (_b = stock === null || stock === void 0 ? void 0 : stock.quantite) !== null && _b !== void 0 ? _b : 0;
+    const stock = yield model_1.Stock.findOne(query).lean();
+    return Number((_b = stock === null || stock === void 0 ? void 0 : stock.quantite) !== null && _b !== void 0 ? _b : 0);
 });
 exports.checkStock = checkStock;
 const checkStockHandler = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { type, produitId, quantite, pointVenteId, regionId } = req.body;
+    const { type, produitId, quantite, pointVenteId, regionId, depotCentral } = req.body;
+    // validations minimales
     if (!type || !produitId || quantite == null) {
-        res.status(400).json({ success: false, message: "Paramètres manquants" });
+        res.status(400).json({ success: false, message: 'Paramètres manquants' });
     }
+    // exclusivité : central vs (région | pv)
+    if (depotCentral && (regionId || pointVenteId)) {
+        res.status(400).json({
+            success: false,
+            message: 'Choisissez UNE portée: depotCentral OU regionId/pointVenteId.',
+        });
+    }
+    // exclusivité région vs pv
     if (regionId && pointVenteId) {
         res.status(400).json({
             success: false,
-            message: "Fournir soit regionId, soit pointVenteId, pas les deux.",
+            message: 'Fournir soit regionId, soit pointVenteId, pas les deux.',
         });
     }
     try {
@@ -305,6 +317,7 @@ const checkStockHandler = (req, res) => __awaiter(void 0, void 0, void 0, functi
             produitId,
             regionId,
             pointVenteId,
+            depotCentral: !!depotCentral, // ✅ passe le flag
         });
         res.json({
             success: true,
@@ -313,7 +326,7 @@ const checkStockHandler = (req, res) => __awaiter(void 0, void 0, void 0, functi
         });
     }
     catch (e) {
-        res.status(500).json({ success: false, message: "Erreur serveur" });
+        res.status(500).json({ success: false, message: 'Erreur serveur' });
     }
 });
 exports.checkStockHandler = checkStockHandler;

@@ -1,36 +1,125 @@
 import { Request, Response } from "express";
 import { Region } from "../Models/model";
 
+/**
+ * GET /regions
+ * Query:
+ *  - page, limit
+ *  - q (recherche sur nom, optionnel)
+ *  - ville (filtre exact ou regex-insensible)
+ *  - sortBy: createdAt | nom | ville | pointVenteCount
+ *  - order: asc | desc
+ *  - includeTotal: 'true' | 'false'
+ */
 export const getAllRegions = async (req: Request, res: Response) => {
   try {
-    const regions = await Region.aggregate([
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 10));
+    const q = (req.query.q as string)?.trim();
+    const ville = (req.query.ville as string)?.trim();
+    const sortBy = (req.query.sortBy as string) || "createdAt";
+    const order = (req.query.order as string) === "asc" ? 1 : -1;
+    const includeTotal = (req.query.includeTotal ?? "true") === "true";
+
+    // $match de base (sur champs de Region)
+    const match: Record<string, any> = {};
+    if (q) match.nom = { $regex: q, $options: "i" };
+    if (ville) match.ville = { $regex: ville, $options: "i" };
+
+    // pipeline commun
+    const basePipeline: any[] = [
+      { $match: match },
       {
         $lookup: {
-          from: "pointventes", // le nom de la collection MongoDB (attention au pluriel et minuscule)
+          from: "pointventes",
           localField: "_id",
           foreignField: "region",
           as: "pointsVente",
         },
       },
-      {
-        $addFields: {
-          pointVenteCount: { $size: "$pointsVente" },
-        },
-      },
+      { $addFields: { pointVenteCount: { $size: "$pointsVente" } } },
       {
         $project: {
           nom: 1,
           ville: 1,
           pointVenteCount: 1,
-          createdAt: 1, // ➕ on ajoute la date de création
+          createdAt: 1,
         },
       },
-    ]);
+      { $sort: { [sortBy]: order } },
+    ];
 
-    res.json(regions);
+    if (includeTotal) {
+      const pipeline = [
+        ...basePipeline,
+        {
+          $facet: {
+            data: [{ $skip: (page - 1) * limit }, { $limit: limit }],
+            totalCount: [{ $count: "total" }],
+          },
+        },
+        {
+          $project: {
+            data: 1,
+            total: { $ifNull: [{ $arrayElemAt: ["$totalCount.total", 0] }, 0] },
+          },
+        },
+      ];
+
+      const agg = await Region.aggregate(pipeline);
+      const data = agg?.[0]?.data ?? [];
+      const total = agg?.[0]?.total ?? 0;
+      const totalPages = Math.max(1, Math.ceil(total / limit));
+
+      res.json({
+        data,
+        meta: {
+          page,
+          limit,
+          total,
+          totalPages,
+          hasPrev: page > 1,
+          hasNext: page < totalPages,
+        },
+      });
+      return;
+    } else {
+      // pas de countDocuments
+      const pipeline = [
+        ...basePipeline,
+        { $skip: (page - 1) * limit },
+        { $limit: limit },
+      ];
+      const data = await Region.aggregate(pipeline);
+      res.json({
+        data,
+        meta: {
+          page,
+          limit,
+          total: data.length,
+          totalPages: 1,
+          hasPrev: false,
+          hasNext: false,
+        },
+      });
+      return;
+    }
   } catch (err) {
     res.status(500).json({ message: "Erreur interne", error: err });
   }
+};
+
+/**
+ * GET /regions/search
+ * Idem getAllRegions mais q est requis.
+ */
+export const searchRegions = async (req: Request, res: Response) => {
+  const q = (req.query.q as string)?.trim();
+  if (!q) res.status(400).json({ message: "Paramètre 'q' requis" });
+
+  // On délègue à getAllRegions (qui sait gérer q) en gardant les mêmes query params
+  getAllRegions(req, res);
+  return;
 };
 
 export const createRegion = async (req: Request, res: Response) => {
@@ -49,7 +138,6 @@ export const updateRegion = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { nom, ville } = req.body;
 
-    // Mise à jour de la région avec validation et retour du document modifié
     const updated = await Region.findByIdAndUpdate(
       id,
       { nom, ville },

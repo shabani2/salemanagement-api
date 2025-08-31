@@ -16,10 +16,10 @@ usersRouter.get("/", auth_1.authenticate, (0, authorize_1.authorize)(["SuperAdmi
 usersRouter.get("/users", userController_1.getAllUsers);
 usersRouter.get("/region", auth_1.authenticate, (0, authorize_1.authorize)(["AdminRegion"]), userController_1.getUsersByRegion);
 // usersRouter.get(
-//   "/point-vente",
+//   "/search",
 //   authenticate,
-//   authorize(["AdminPointVente"]),
-//   getUsersByPointVente,
+//   // authorize(["AdminPointVente"]),
+//   search,
 // );
 usersRouter.put("/", upload_1.upload.single("image"), auth_1.authenticate, userController_1.updateUser);
 exports.default = usersRouter;
