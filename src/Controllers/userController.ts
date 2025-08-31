@@ -332,11 +332,9 @@ export const updateUser = async (
         $or: [{ telephone }, { email: telephone }],
       });
       if (existingUser && String(existingUser._id) !== String(user._id)) {
-        res
-          .status(400)
-          .json({
-            message: "Le numéro de téléphone ou l'email est déjà utilisé",
-          });
+        res.status(400).json({
+          message: "Le numéro de téléphone ou l'email est déjà utilisé",
+        });
         return;
       }
       updateFields.telephone = telephone;
