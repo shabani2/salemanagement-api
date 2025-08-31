@@ -10,9 +10,8 @@ import { Types } from "mongoose";
  * - On présuppose un tri DESC sur updatedAt/createdAt pour garder le 1er vu
  * =========================================================== */
 
-
 type CheckStockInput = {
-  type: 'Entrée' | 'Vente' | 'Sortie' | 'Livraison' | 'Commande' | string;
+  type: "Entrée" | "Vente" | "Sortie" | "Livraison" | "Commande" | string;
   produitId: string;
   regionId?: string;
   pointVenteId?: string;
@@ -279,8 +278,6 @@ export const deleteStock = async (req: Request, res: Response) => {
   }
 };
 
-
-
 export const checkStock = async ({
   type,
   produitId,
@@ -311,7 +308,7 @@ export const checkStock = async ({
     // ✅ portée PV (on exclut central)
     query.pointVente = pointVenteId;
     query.depotCentral = { $ne: true };
-  } else if (type === 'Livraison') {
+  } else if (type === "Livraison") {
     // ✅ fallback livraison -> central si rien n’est spécifié
     query.depotCentral = true;
   } else {
@@ -323,35 +320,35 @@ export const checkStock = async ({
   return Number(stock?.quantite ?? 0);
 };
 
-
 export const checkStockHandler = async (req: Request, res: Response) => {
-  const { type, produitId, quantite, pointVenteId, regionId, depotCentral } = req.body as {
-    type: string;
-    produitId: string;
-    quantite: number;
-    pointVenteId?: string;
-    regionId?: string;
-    depotCentral?: boolean; // ✅ nouveau
-  };
+  const { type, produitId, quantite, pointVenteId, regionId, depotCentral } =
+    req.body as {
+      type: string;
+      produitId: string;
+      quantite: number;
+      pointVenteId?: string;
+      regionId?: string;
+      depotCentral?: boolean; // ✅ nouveau
+    };
 
   // validations minimales
   if (!type || !produitId || quantite == null) {
-    res.status(400).json({ success: false, message: 'Paramètres manquants' });
+    res.status(400).json({ success: false, message: "Paramètres manquants" });
   }
 
   // exclusivité : central vs (région | pv)
   if (depotCentral && (regionId || pointVenteId)) {
-     res.status(400).json({
+    res.status(400).json({
       success: false,
-      message: 'Choisissez UNE portée: depotCentral OU regionId/pointVenteId.',
+      message: "Choisissez UNE portée: depotCentral OU regionId/pointVenteId.",
     });
   }
 
   // exclusivité région vs pv
   if (regionId && pointVenteId) {
-   res.status(400).json({
+    res.status(400).json({
       success: false,
-      message: 'Fournir soit regionId, soit pointVenteId, pas les deux.',
+      message: "Fournir soit regionId, soit pointVenteId, pas les deux.",
     });
   }
 
@@ -364,12 +361,12 @@ export const checkStockHandler = async (req: Request, res: Response) => {
       depotCentral: !!depotCentral, // ✅ passe le flag
     });
 
-   res.json({
+    res.json({
       success: true,
       quantiteDisponible,
       suffisant: quantiteDisponible >= Number(quantite),
     });
   } catch (e) {
-     res.status(500).json({ success: false, message: 'Erreur serveur' });
+    res.status(500).json({ success: false, message: "Erreur serveur" });
   }
 };
