@@ -16,7 +16,11 @@ import {
   IVente,
 } from "./interfaceModels";
 import bcrypt from "bcryptjs";
-import { adjustStock, computeLivraisonScopes, computeOperationSource } from "../Middlewares/operationHandler";
+import {
+  adjustStock,
+  computeLivraisonScopes,
+  computeOperationSource,
+} from "../Middlewares/operationHandler";
 
 export type UserRoleType = (typeof UserRole)[number];
 
@@ -157,7 +161,15 @@ const MouvementStockSchema = new Schema<IMouvementStock>(
 
 MouvementStockSchema.pre("save", async function (next) {
   try {
-    const { type, statut, produit, quantite, pointVente, region, depotCentral } = this as any;
+    const {
+      type,
+      statut,
+      produit,
+      quantite,
+      pointVente,
+      region,
+      depotCentral,
+    } = this as any;
 
     // Entrée & Commande: pas de contrôle de dispo
     if (type === "Entrée" || type === "Commande") return next();
@@ -165,7 +177,8 @@ MouvementStockSchema.pre("save", async function (next) {
     // LIVRAISON: vérifier le stock de la *source* uniquement
     if (type === "Livraison") {
       const { source, reasonIfInvalid } = computeLivraisonScopes(this);
-      if (!source) return next(new Error(reasonIfInvalid || "Livraison invalide"));
+      if (!source)
+        return next(new Error(reasonIfInvalid || "Livraison invalide"));
 
       const srcStock = await Stock.findOne(source).lean().exec();
       if (!srcStock || srcStock.quantite < quantite) {
@@ -195,17 +208,27 @@ MouvementStockSchema.pre("save", async function (next) {
   }
 });
 
-
 // POST-SAVE LOGIC
 
 MouvementStockSchema.post("save", async function (doc) {
   try {
-    const { produit, quantite, type, statut, pointVente, montant, region, depotCentral, transferApplied } = doc as any;
+    const {
+      produit,
+      quantite,
+      type,
+      statut,
+      pointVente,
+      montant,
+      region,
+      depotCentral,
+      transferApplied,
+    } = doc as any;
 
     // ENTRÉE: on crédite directement la destination (region sinon central)
     if (type === "Entrée") {
       if (region) await adjustStock({ produit, region }, quantite, montant);
-      else await adjustStock({ produit, depotCentral: true }, quantite, montant);
+      else
+        await adjustStock({ produit, depotCentral: true }, quantite, montant);
       return;
     }
 
@@ -222,7 +245,8 @@ MouvementStockSchema.post("save", async function (doc) {
 
     // LIVRAISON:
     if (type === "Livraison") {
-      const { source, destination, reasonIfInvalid } = computeLivraisonScopes(doc);
+      const { source, destination, reasonIfInvalid } =
+        computeLivraisonScopes(doc);
       if (!source) return console.error(reasonIfInvalid);
 
       // 1) Toujours décrémenter la source immédiatement
@@ -234,7 +258,7 @@ MouvementStockSchema.post("save", async function (doc) {
         // Marquer comme appliqué pour éviter double crédit à l’update
         await (doc.constructor as any).updateOne(
           { _id: doc._id, transferApplied: { $ne: true } },
-          { $set: { transferApplied: true } }
+          { $set: { transferApplied: true } },
         );
       }
     }
@@ -243,13 +267,14 @@ MouvementStockSchema.post("save", async function (doc) {
   }
 });
 
-
-
 // On doit comparer ancien vs nouveau statut
 MouvementStockSchema.pre("findOneAndUpdate", async function (next) {
   try {
     // on mémorise l’ancien doc pour détecter la transition
-    (this as any)._oldDoc = await (this.model as any).findOne(this.getQuery()).lean().exec();
+    (this as any)._oldDoc = await (this.model as any)
+      .findOne(this.getQuery())
+      .lean()
+      .exec();
     next();
   } catch (e) {
     next(e as mongoose.CallbackError);
@@ -283,13 +308,12 @@ MouvementStockSchema.post("findOneAndUpdate", async function (resDoc: any) {
     await adjustStock(destination, quantite, montant);
     await (this.model as any).updateOne(
       { _id: newDoc._id, transferApplied: { $ne: true } },
-      { $set: { transferApplied: true } }
+      { $set: { transferApplied: true } },
     );
   } catch (err) {
     console.error("Erreur post-update MouvementStock:", err);
   }
 });
-
 
 UserSchema.pre("save", async function (next) {
   try {

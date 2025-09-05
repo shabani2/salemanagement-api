@@ -290,7 +290,7 @@ export const checkStock = async ({
   if (regionId && !Types.ObjectId.isValid(regionId)) return 0;
   if (pointVenteId && !Types.ObjectId.isValid(pointVenteId)) return 0;
 
-  const t = (type || '').toLowerCase();
+  const t = (type || "").toLowerCase();
   const query: any = { produit: produitId };
 
   // 1) Le central gagne toujours s’il est demandé
@@ -308,7 +308,7 @@ export const checkStock = async ({
     query.depotCentral = { $ne: true };
   }
   // 4) Fallback: si aucune portée n’est donnée et type ∈ {livraison, vente, sortie} → central
-  else if (t === 'livraison' || t === 'vente' || t === 'sortie') {
+  else if (t === "livraison" || t === "vente" || t === "sortie") {
     query.depotCentral = true;
   }
   // 5) Aucune portée exploitable
@@ -323,8 +323,8 @@ export const checkStock = async ({
 // utils
 const normId = (v: unknown): string | undefined => {
   if (!v) return undefined;
-  if (typeof v === 'string') return v;
-  if (typeof v === 'object' && (v as any)?._id) return String((v as any)._id);
+  if (typeof v === "string") return v;
+  if (typeof v === "object" && (v as any)?._id) return String((v as any)._id);
   return undefined;
 };
 
@@ -337,12 +337,13 @@ export const checkStockHandler = async (req: Request, res: Response) => {
   };
   // ⚠️ early return
   if (!type || !produitId || quantite == null) {
-     res.status(400).json({ success: false, message: 'Paramètres manquants' });
+    res.status(400).json({ success: false, message: "Paramètres manquants" });
   }
 
   // normaliser/filtrer les scopes
   const depotCentral =
-    req.body.depotCentral === true || String(req.body.depotCentral).toLowerCase() === 'true';
+    req.body.depotCentral === true ||
+    String(req.body.depotCentral).toLowerCase() === "true";
   const regionId = normId(req.body.regionId);
   const pointVenteId = normId(req.body.pointVenteId);
 
@@ -350,26 +351,26 @@ export const checkStockHandler = async (req: Request, res: Response) => {
   const scope = depotCentral
     ? { depotCentral: true }
     : regionId
-    ? { regionId }
-    : pointVenteId
-    ? { pointVenteId }
-    : undefined;
+      ? { regionId }
+      : pointVenteId
+        ? { pointVenteId }
+        : undefined;
 
   try {
     const quantiteDisponible = await checkStock({
-      type : type ?? '',
-      produitId: produitId ?? '',
+      type: type ?? "",
+      produitId: produitId ?? "",
       regionId: scope?.regionId,
       pointVenteId: scope?.pointVenteId,
       depotCentral: !!scope?.depotCentral,
     });
 
-     res.json({
+    res.json({
       success: true,
       quantiteDisponible,
       suffisant: quantiteDisponible >= Number(quantite),
     });
   } catch (e) {
-     res.status(500).json({ success: false, message: 'Erreur serveur' });
+    res.status(500).json({ success: false, message: "Erreur serveur" });
   }
 };

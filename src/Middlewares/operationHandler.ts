@@ -1,7 +1,6 @@
 import mongoose, { Types } from "mongoose";
 import { Stock } from "../Models/model";
 
-
 type OID = mongoose.Types.ObjectId;
 
 export interface AdjustStockFilter {
@@ -14,7 +13,7 @@ export interface AdjustStockFilter {
 export const adjustStock = async (
   filter: AdjustStockFilter,
   qtyChange: number,
-  montantChange: number
+  montantChange: number,
 ): Promise<void> => {
   await Stock.findOneAndUpdate(
     filter,
@@ -22,7 +21,7 @@ export const adjustStock = async (
       $inc: { quantite: qtyChange, montant: montantChange },
       $setOnInsert: { produit: filter.produit },
     },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
+    { upsert: true, new: true, setDefaultsOnInsert: true },
   ).exec();
 };
 
@@ -50,8 +49,8 @@ export function computeLivraisonScopes(doc: any): {
       destination: pointVente
         ? { produit, pointVente }
         : region
-        ? { produit, region }
-        : undefined,
+          ? { produit, region }
+          : undefined,
     };
   }
 
@@ -69,18 +68,30 @@ export function computeLivraisonScopes(doc: any): {
     };
   }
 
-  return { reasonIfInvalid: "Livraison invalide: préciser depotCentral=true ou region." };
+  return {
+    reasonIfInvalid:
+      "Livraison invalide: préciser depotCentral=true ou region.",
+  };
 }
 
 // Source d’une Vente/Sortie
-export function computeOperationSource(doc: any): { source?: AdjustStockFilter; reasonIfInvalid?: string } {
+export function computeOperationSource(doc: any): {
+  source?: AdjustStockFilter;
+  reasonIfInvalid?: string;
+} {
   const { produit, depotCentral, region, pointVente } = doc as {
-    produit: OID; depotCentral?: boolean; region?: OID; pointVente?: OID;
+    produit: OID;
+    depotCentral?: boolean;
+    region?: OID;
+    pointVente?: OID;
   };
 
   if (depotCentral === true) return { source: { produit, depotCentral: true } };
   if (region) return { source: { produit, region } };
   if (pointVente) return { source: { produit, pointVente } };
 
-  return { reasonIfInvalid: "Opération invalide: préciser l’emplacement (depotCentral/region/pointVente)." };
+  return {
+    reasonIfInvalid:
+      "Opération invalide: préciser l’emplacement (depotCentral/region/pointVente).",
+  };
 }
