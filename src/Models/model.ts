@@ -16,6 +16,7 @@ import {
   IVente,
 } from "./interfaceModels";
 import bcrypt from "bcryptjs";
+import { adjustStock, computeLivraisonScopes, computeOperationSource } from "../Middlewares/operationHandler";
 
 export type UserRoleType = (typeof UserRole)[number];
 
@@ -156,45 +157,36 @@ const MouvementStockSchema = new Schema<IMouvementStock>(
 
 MouvementStockSchema.pre("save", async function (next) {
   try {
-    const { type, statut, produit, quantite, pointVente, region } = this;
+    const { type, statut, produit, quantite, pointVente, region, depotCentral } = this as any;
 
-    if (type === "Entrée" || type === "Commande") {
-      return next();
-    }
+    // Entrée & Commande: pas de contrôle de dispo
+    if (type === "Entrée" || type === "Commande") return next();
 
+    // LIVRAISON: vérifier le stock de la *source* uniquement
     if (type === "Livraison") {
-      if (region) {
-        const regionStock = await Stock.findOne({ produit, region });
-        if (!regionStock || regionStock.quantite < quantite) {
-          return next(
-            new Error("Stock insuffisant dans la région pour la livraison"),
-          );
-        }
-      } else {
-        const depotStock = await Stock.findOne({ produit, depotCentral: true });
-        if (!depotStock || depotStock.quantite < quantite) {
-          return next(
-            new Error("Stock insuffisant au dépôt central pour la livraison"),
-          );
-        }
+      const { source, reasonIfInvalid } = computeLivraisonScopes(this);
+      if (!source) return next(new Error(reasonIfInvalid || "Livraison invalide"));
+
+      const srcStock = await Stock.findOne(source).lean().exec();
+      if (!srcStock || srcStock.quantite < quantite) {
+        return next(new Error("Stock source insuffisant pour la livraison"));
       }
       return next();
     }
 
-    if (statut) {
-      if (region) {
-        const regionStock = await Stock.findOne({ produit, region });
-        if (!regionStock || regionStock.quantite < quantite) {
-          return next(
-            new Error("Stock insuffisant dans la région pour l'opération"),
-          );
-        }
-      } else {
-        const pointStock = await Stock.findOne({ produit, pointVente });
-        if (!pointStock || pointStock.quantite < quantite) {
-          return next(new Error("Stock insuffisant au point de vente"));
+    // VENTE / SORTIE: vérifier la source selon depotCentral/region/pointVente
+    if (["Vente", "Sortie"].includes(type)) {
+      const { source, reasonIfInvalid } = computeOperationSource(this);
+      if (!source) return next(new Error(reasonIfInvalid || "Portée invalide"));
+
+      // on applique la politique existante: seulement si statut est activé, on “consomme”
+      if (statut) {
+        const s = await Stock.findOne(source).lean().exec();
+        if (!s || s.quantite < quantite) {
+          return next(new Error("Stock insuffisant pour l'opération"));
         }
       }
+      return next();
     }
 
     next();
@@ -203,83 +195,101 @@ MouvementStockSchema.pre("save", async function (next) {
   }
 });
 
+
 // POST-SAVE LOGIC
 
 MouvementStockSchema.post("save", async function (doc) {
   try {
-    const { produit, quantite, type, statut, pointVente, montant, region } =
-      doc;
+    const { produit, quantite, type, statut, pointVente, montant, region, depotCentral, transferApplied } = doc as any;
 
-    interface AdjustStockFilter {
-      produit: mongoose.Types.ObjectId;
-      region?: mongoose.Types.ObjectId;
-      pointVente?: mongoose.Types.ObjectId;
-      depotCentral?: boolean;
-    }
-
-    type QtyChange = number;
-    type MontantChange = number;
-
-    const adjustStock = async (
-      filter: AdjustStockFilter,
-      qtyChange: QtyChange,
-      montantChange: MontantChange,
-    ): Promise<void> => {
-      try {
-        await Stock.findOneAndUpdate(
-          filter,
-          {
-            $inc: { quantite: qtyChange, montant: montantChange },
-            $setOnInsert: { produit: filter.produit },
-          },
-          {
-            upsert: true,
-            new: true,
-            setDefaultsOnInsert: true,
-          },
-        );
-      } catch (err) {
-        console.error("Erreur ajustement stock:", err);
-      }
-    };
-
+    // ENTRÉE: on crédite directement la destination (region sinon central)
     if (type === "Entrée") {
-      if (region) {
-        await adjustStock({ produit, region }, quantite, montant);
-      } else {
-        await adjustStock({ produit, depotCentral: true }, quantite, montant);
-      }
+      if (region) await adjustStock({ produit, region }, quantite, montant);
+      else await adjustStock({ produit, depotCentral: true }, quantite, montant);
       return;
     }
 
+    // Pour les autres, si statut falsy et type !== Livraison, on ne touche pas (comportement existant)
     if (!statut && type !== "Livraison") return;
 
-    if (["Sortie", "Vente"].includes(type)) {
-      if (region) {
-        await adjustStock({ produit, region }, -quantite, -montant);
-      } else if (pointVente) {
-        await adjustStock({ produit, pointVente }, -quantite, -montant);
-      }
+    // VENTE / SORTIE: décrémente la source quand statut=true
+    if (["Vente", "Sortie"].includes(type)) {
+      const { source, reasonIfInvalid } = computeOperationSource(doc);
+      if (!source) return console.error(reasonIfInvalid);
+      await adjustStock(source, -quantite, -montant);
       return;
     }
 
+    // LIVRAISON:
     if (type === "Livraison") {
-      if (region) {
-        await adjustStock({ produit, region }, -quantite, -montant);
-        if (pointVente) {
-          await adjustStock({ produit, pointVente }, quantite, montant);
-        }
-      } else {
-        await adjustStock({ produit, depotCentral: true }, -quantite, -montant);
-        if (pointVente) {
-          await adjustStock({ produit, pointVente }, quantite, montant);
-        }
+      const { source, destination, reasonIfInvalid } = computeLivraisonScopes(doc);
+      if (!source) return console.error(reasonIfInvalid);
+
+      // 1) Toujours décrémenter la source immédiatement
+      await adjustStock(source, -quantite, -montant);
+
+      // 2) Crédite la destination *seulement* si statut=true au moment de la création
+      if (statut && destination && !transferApplied) {
+        await adjustStock(destination, quantite, montant);
+        // Marquer comme appliqué pour éviter double crédit à l’update
+        await (doc.constructor as any).updateOne(
+          { _id: doc._id, transferApplied: { $ne: true } },
+          { $set: { transferApplied: true } }
+        );
       }
     }
   } catch (err) {
     console.error("Erreur post-save MouvementStock:", err);
   }
 });
+
+
+
+// On doit comparer ancien vs nouveau statut
+MouvementStockSchema.pre("findOneAndUpdate", async function (next) {
+  try {
+    // on mémorise l’ancien doc pour détecter la transition
+    (this as any)._oldDoc = await (this.model as any).findOne(this.getQuery()).lean().exec();
+    next();
+  } catch (e) {
+    next(e as mongoose.CallbackError);
+  }
+});
+
+MouvementStockSchema.post("findOneAndUpdate", async function (resDoc: any) {
+  try {
+    if (!resDoc) return;
+    const oldDoc = (this as any)._oldDoc as any;
+    const newDoc = await (this.model as any).findById(resDoc._id).lean().exec();
+    if (!oldDoc || !newDoc) return;
+
+    // Transition false -> true ?
+    const wasFalse = !oldDoc.statut;
+    const isTrue = !!newDoc.statut;
+
+    if (newDoc.type !== "Livraison") return;
+    if (!(wasFalse && isTrue)) return;
+
+    // Créditer la destination si pas encore fait
+    if (newDoc.transferApplied) return;
+
+    const { produit, quantite, montant } = newDoc;
+    const { destination, reasonIfInvalid } = computeLivraisonScopes(newDoc);
+    if (!destination) {
+      console.error(reasonIfInvalid || "Livraison sans destination à l’update");
+      return;
+    }
+
+    await adjustStock(destination, quantite, montant);
+    await (this.model as any).updateOne(
+      { _id: newDoc._id, transferApplied: { $ne: true } },
+      { $set: { transferApplied: true } }
+    );
+  } catch (err) {
+    console.error("Erreur post-update MouvementStock:", err);
+  }
+});
+
 
 UserSchema.pre("save", async function (next) {
   try {

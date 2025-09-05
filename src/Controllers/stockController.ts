@@ -278,6 +278,7 @@ export const deleteStock = async (req: Request, res: Response) => {
   }
 };
 
+// checkStock.ts
 export const checkStock = async ({
   type,
   produitId,
@@ -289,84 +290,86 @@ export const checkStock = async ({
   if (regionId && !Types.ObjectId.isValid(regionId)) return 0;
   if (pointVenteId && !Types.ObjectId.isValid(pointVenteId)) return 0;
 
-  // exclusivité : si central est explicitement demandé, on ignore PV/region
-  if (depotCentral && (regionId || pointVenteId)) {
-    // incohérent : l'appelant doit choisir UNE portée
-    return 0;
-  }
-
+  const t = (type || '').toLowerCase();
   const query: any = { produit: produitId };
 
+  // 1) Le central gagne toujours s’il est demandé
   if (depotCentral === true) {
-    // ✅ portée centrale explicite
     query.depotCentral = true;
-  } else if (regionId) {
-    // ✅ portée régionale (on exclut central)
+  }
+  // 2) Sinon, la région prime si présente (même si pointVenteId est aussi fourni)
+  else if (regionId) {
     query.region = regionId;
     query.depotCentral = { $ne: true };
-  } else if (pointVenteId) {
-    // ✅ portée PV (on exclut central)
+  }
+  // 3) Sinon, le point de vente
+  else if (pointVenteId) {
     query.pointVente = pointVenteId;
     query.depotCentral = { $ne: true };
-  } else if (type === "Livraison") {
-    // ✅ fallback livraison -> central si rien n’est spécifié
+  }
+  // 4) Fallback: si aucune portée n’est donnée et type ∈ {livraison, vente, sortie} → central
+  else if (t === 'livraison' || t === 'vente' || t === 'sortie') {
     query.depotCentral = true;
-  } else {
-    // ❌ pas de portée exploitable
+  }
+  // 5) Aucune portée exploitable
+  else {
     return 0;
   }
 
-  const stock = await Stock.findOne(query).lean();
+  const stock = await Stock.findOne(query).lean().exec();
   return Number(stock?.quantite ?? 0);
 };
 
+// utils
+const normId = (v: unknown): string | undefined => {
+  if (!v) return undefined;
+  if (typeof v === 'string') return v;
+  if (typeof v === 'object' && (v as any)?._id) return String((v as any)._id);
+  return undefined;
+};
+
+// checkStockHandler.ts
 export const checkStockHandler = async (req: Request, res: Response) => {
-  const { type, produitId, quantite, pointVenteId, regionId, depotCentral } =
-    req.body as {
-      type: string;
-      produitId: string;
-      quantite: number;
-      pointVenteId?: string;
-      regionId?: string;
-      depotCentral?: boolean; // ✅ nouveau
-    };
-
-  // validations minimales
+  const { type, produitId, quantite } = req.body as {
+    type?: string;
+    produitId?: string;
+    quantite?: number;
+  };
+  // ⚠️ early return
   if (!type || !produitId || quantite == null) {
-    res.status(400).json({ success: false, message: "Paramètres manquants" });
+     res.status(400).json({ success: false, message: 'Paramètres manquants' });
   }
 
-  // exclusivité : central vs (région | pv)
-  if (depotCentral && (regionId || pointVenteId)) {
-    res.status(400).json({
-      success: false,
-      message: "Choisissez UNE portée: depotCentral OU regionId/pointVenteId.",
-    });
-  }
+  // normaliser/filtrer les scopes
+  const depotCentral =
+    req.body.depotCentral === true || String(req.body.depotCentral).toLowerCase() === 'true';
+  const regionId = normId(req.body.regionId);
+  const pointVenteId = normId(req.body.pointVenteId);
 
-  // exclusivité région vs pv
-  if (regionId && pointVenteId) {
-    res.status(400).json({
-      success: false,
-      message: "Fournir soit regionId, soit pointVenteId, pas les deux.",
-    });
-  }
+  // priorité unifiée côté API (le client ne peut plus forcer un mauvais scope)
+  const scope = depotCentral
+    ? { depotCentral: true }
+    : regionId
+    ? { regionId }
+    : pointVenteId
+    ? { pointVenteId }
+    : undefined;
 
   try {
     const quantiteDisponible = await checkStock({
-      type,
-      produitId,
-      regionId,
-      pointVenteId,
-      depotCentral: !!depotCentral, // ✅ passe le flag
+      type : type ?? '',
+      produitId: produitId ?? '',
+      regionId: scope?.regionId,
+      pointVenteId: scope?.pointVenteId,
+      depotCentral: !!scope?.depotCentral,
     });
 
-    res.json({
+     res.json({
       success: true,
       quantiteDisponible,
       suffisant: quantiteDisponible >= Number(quantite),
     });
   } catch (e) {
-    res.status(500).json({ success: false, message: "Erreur serveur" });
+     res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 };
