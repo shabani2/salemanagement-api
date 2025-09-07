@@ -9,58 +9,107 @@ import {
   Produit,
 } from "../Models/model";
 
+
+
+
+
+
+
+
+
+const toObjectId = (v: string) => new mongoose.Types.ObjectId(String(v));
+
+// --- helpers locaux (remplacent ../lib/utils) ---
+const toBool = (v: unknown, fallback = false): boolean => {
+  if (v === undefined || v === null) return fallback;
+  if (typeof v === 'boolean') return v;
+  if (typeof v === 'number') return v !== 0;
+  const s = String(v).trim().toLowerCase();
+  return ['1', 'true', 'yes', 'on'].includes(s);
+};
+
+// Autorisation minimale: SuperAdmin ok, AdminRegion limité à sa région
+async function assertCanAccessRegion(req: any, regionId: string): Promise<void> {
+  const user = req?.user;
+  if (!user) throw Object.assign(new Error('Non authentifié'), { status: 401 });
+  const role = user.role;
+  if (role === 'SuperAdmin') return;
+
+  // extrait l'id de région depuis l'objet ou la chaîne
+  const userRegionId: string | undefined =
+    typeof user.region === 'string' ? user.region : user?.region?._id;
+
+  if (role === 'AdminRegion' && userRegionId && String(userRegionId) === String(regionId)) return;
+  throw Object.assign(new Error("Accès refusé à cette région"), { status: 403 });
+}
+
 // GET /mouvements/page
 export const getAllMouvementsStockPage = async (
-  req: AuthedRequest,
-  res: Response,
+req: AuthedRequest,
+res: Response,
 ) => {
-  try {
-    const page = parseIntSafe(req.query.page, 1);
-    const limit = parseIntSafe(req.query.limit, 10);
-    const skip = (page - 1) * limit;
+try {
+const page = parseIntSafe(req.query.page, 1);
+const limit = parseIntSafe(req.query.limit, 10);
+const skip = (page - 1) * limit;
 
-    const sortBy = (req.query.sortBy as string) || "createdAt";
-    const order = sortDir(req.query.order as string);
-    const q = (req.query.q as string) || "";
 
-    // 1) portée + filtres
-    const scope = buildScope(req);
-    const match = applyBusinessFilters(scope, req);
+const sortBy = (req.query.sortBy as string) || 'createdAt';
+const order = sortDir(req.query.order as string);
+const q = (req.query.q as string) || '';
 
-    // 2) stratégie
-    if (mustUseAggregate(sortBy, q)) {
-      const pipeline = buildAggregatePipeline(match, {
-        q,
-        sortBy,
-        order,
-        skip,
-        limit,
-      });
-      const result = await MouvementStock.aggregate(pipeline);
-      const data = result?.[0]?.data ?? [];
-      const total = (result?.[0]?.metadata?.[0]?.total as number) ?? 0;
-      sendPaged(res, { total, page, limit, mouvements: data });
-      return;
-    }
 
-    // 3) find() + populate
-    const total = await MouvementStock.countDocuments(match);
-    const mouvements = await populateAll(
-      MouvementStock.find(match)
-        .sort({ [sortBy]: order })
-        .skip(skip)
-        .limit(limit),
-    );
+// 1) portée + filtres de base
+const scope = buildScope(req);
+const baseMatch = applyBusinessFilters(scope, req);
 
-    sendPaged(res, { total, page, limit, mouvements });
-    return;
-  } catch (err: any) {
-    const status = err?.status ?? 500;
-    res
-      .status(status)
-      .json({ message: "Erreur interne", error: err?.message ?? err });
-    return;
-  }
+
+// 1.b) si on filtre par région (et pas de PV explicite), étendre en (region == X) OU (pointVente ∈ PVs(region X))
+const onlyRegion = toBool(req.query.onlyRegion, false); // permet de forcer le comportement strict si besoin
+let match = { ...baseMatch } as any;
+
+
+if (match.region && !match.pointVente && !onlyRegion) {
+const regionOID = toId(match.region);
+if (regionOID) {
+// récupérer tous les PV attachés à cette région
+const pvIds = (await PointVente.distinct('_id', { region: regionOID })).map((id: any) => toId(id)).filter(Boolean);
+
+
+// retirer la contrainte top-level `region` pour la remplacer par un $or
+const { region, ...rest } = match;
+const or: any[] = [{ region: regionOID }];
+if (pvIds.length) or.push({ pointVente: { $in: pvIds } });
+match = { ...rest, $or: or };
+}
+}
+
+
+// 2) stratégie
+if (mustUseAggregate(sortBy, q)) {
+const pipeline = buildAggregatePipeline(match, { q, sortBy, order, skip, limit });
+const result = await MouvementStock.aggregate(pipeline);
+const data = result?.[0]?.data ?? [];
+const total = (result?.[0]?.metadata?.[0]?.total as number) ?? 0;
+sendPaged(res, { total, page, limit, mouvements: data });
+return;
+}
+
+
+// 3) find() + populate
+const total = await MouvementStock.countDocuments(match);
+const mouvements = await populateAll(
+MouvementStock.find(match).sort({ [sortBy]: order }).skip(skip).limit(limit),
+);
+
+
+sendPaged(res, { total, page, limit, mouvements });
+return;
+} catch (err: any) {
+const status = err?.status ?? 500;
+res.status(status).json({ message: 'Erreur interne', error: err?.message ?? err });
+return;
+}
 };
 
 /* --------------------------- LISTE NON PAGINÉE ---------------------------- */
@@ -239,13 +288,6 @@ function populateAll(q: any) {
 }
 
 /** Vérifie accès à une région pour non-SuperAdmin. */
-async function assertCanAccessRegion(req: AuthedRequest, regionId: string) {
-  if (isSuperAdmin(req)) return;
-  const allowed = toId((req.user as any)?.region);
-  if (!allowed || String(allowed) !== String(toId(regionId))) {
-    throw { status: 403, message: "Accès refusé à cette région." };
-  }
-}
 
 /** Vérifie accès à un PV pour non-SuperAdmin. */
 async function assertCanAccessPointVente(
@@ -486,126 +528,105 @@ export const getMouvementsStockByPointVenteId = async (
 /* ----------------------------------- RÉGION -------------------------------- */
 // GET "/region/:regionId"
 // petit helper pour parser les bools depuis la query
-const toBool = (v: unknown, def = false) =>
-  v === true || v === "true" || v === "1"
-    ? true
-    : v === false || v === "false" || v === "0"
-      ? false
-      : def;
+
+
 
 export const getMouvementStockByRegion = async (
   req: AuthedRequest,
   res: Response,
 ): Promise<void> => {
   try {
-    const { regionId } = req.params;
+    const { regionId } = req.params as { regionId: string };
     if (!regionId || !mongoose.isValidObjectId(regionId)) {
-      res.status(400).json({ message: "regionId requis ou invalide" });
+      res.status(400).json({ message: 'regionId requis ou invalide' });
       return;
     }
 
-    // Autorisation : l'utilisateur peut-il accéder à cette région ?
+    const regionOID = toObjectId(regionId);
+
+    // AuthZ
     await assertCanAccessRegion(req, regionId);
 
-    // --- pagination & tri ---
-    const page = Math.max(parseInt(String(req.query.page ?? "1"), 10) || 1, 1);
+    // pagination & tri
+    const page = Math.max(parseInt(String(req.query.page ?? '1'), 10) || 1, 1);
     const limit = Math.min(
-      Math.max(parseInt(String(req.query.limit ?? "20"), 10) || 20, 1),
+      Math.max(parseInt(String(req.query.limit ?? '20'), 10) || 20, 1),
       200,
-    ); // borne haute pour éviter les abus
+    );
     const skip = (page - 1) * limit;
 
-    const sortBy = (req.query.sortBy as string) || "createdAt";
-    const order =
-      ((req.query.order as string) || "desc").toLowerCase() === "asc" ? 1 : -1;
+    const sortBy = (req.query.sortBy as string) || 'createdAt';
+    const order = ((req.query.order as string) || 'desc').toLowerCase() === 'asc' ? 1 : -1;
 
     const includeRefs = toBool(req.query.includeRefs, true);
     const includeTotal = toBool(req.query.includeTotal, false);
 
-    // --- autres filtres éventuels (dates, type, produit, user, etc.) ---
-    // On reconstruit un filtre "neutre" depuis la query en ignorant 'region' et 'pointVente'
-    // pour éviter de casser la logique OR qu'on va ajouter.
+    // base filters (NE PAS inclure region/pointVente ici)
     const baseFilter: Record<string, any> = {};
-
-    // Exemple de filtres usuels (adapte selon ton buildFilter si tu en as un)
     if (req.query.type) baseFilter.type = req.query.type;
     if (req.query.produit) {
       const pid = String(req.query.produit);
-      if (mongoose.isValidObjectId(pid))
-        baseFilter.produit = new mongoose.Types.ObjectId(pid);
+      if (mongoose.isValidObjectId(pid)) baseFilter.produit = toObjectId(pid);
     }
-    // Filtre par période (createdAt)
     const createdAt: any = {};
-    if (req.query.dateFrom)
-      createdAt.$gte = new Date(String(req.query.dateFrom));
+    if (req.query.dateFrom) createdAt.$gte = new Date(String(req.query.dateFrom));
     if (req.query.dateTo) createdAt.$lte = new Date(String(req.query.dateTo));
     if (Object.keys(createdAt).length) baseFilter.createdAt = createdAt;
 
-    // --- récupère les PV de la région ---
-    const pointVenteIds: mongoose.Types.ObjectId[] = await PointVente.find({
-      region: new mongoose.Types.ObjectId(regionId),
-    }).distinct("_id");
+    // Récupère les PV de la région (cast explicite => évite les non-matchs)
+    const rawPvIds = await PointVente.distinct('_id', { region: regionOID });
+    const pvIds: mongoose.Types.ObjectId[] = rawPvIds.map((id: any) => toObjectId(String(id)));
 
-    // --- filtre final: mouvements dont region == regionId OU pointVente ∈ PV(regionId) ---
-    const regionOrPVFilter = {
+    // Filtre final: mouvements de la région OU des PV appartenant à la région
+    const regionOrPVFilter: Record<string, any> = {
       $or: [
-        { region: new mongoose.Types.ObjectId(regionId) },
-        { pointVente: { $in: pointVenteIds } },
+        { region: regionOID },
+        ...(pvIds.length ? [{ pointVente: { $in: pvIds } }] : []), // évite $in: []
       ],
     };
 
-    const finalFilter = { $and: [baseFilter, regionOrPVFilter] };
+    // filtre optionnel sur un PV précis (si fourni dans la query)
+    let pvMatchClause: Record<string, any> = {};
+    if (req.query.pointVente && mongoose.isValidObjectId(String(req.query.pointVente))) {
+      pvMatchClause = { pointVente: toObjectId(String(req.query.pointVente)) };
+    }
 
-    // --- requête ---
+    const finalFilter = { $and: [baseFilter, regionOrPVFilter, pvMatchClause] };
+
     let query = MouvementStock.find(finalFilter)
-      .sort({ [sortBy]: order })
+      .sort({ [sortBy]: order as 1 | -1 })
       .skip(skip)
       .limit(limit)
       .lean();
 
     if (includeRefs) {
       query = query
-        .populate({
-          path: "produit",
-          populate: { path: "categorie", model: "Categorie" },
-        })
-        .populate({
-          path: "pointVente",
-          populate: { path: "region", model: "Region" },
-        })
-        .populate("region")
-        .populate("user")
-        .populate("commandeId");
+        .populate({ path: 'produit', populate: { path: 'categorie', model: 'Categorie' } })
+        .populate({ path: 'pointVente', populate: { path: 'region', model: 'Region' } })
+        .populate('region')
+        .populate('user')
+        .populate('commandeId');
     }
 
     const execList = query.exec();
-    const execCount = includeTotal
-      ? MouvementStock.countDocuments(finalFilter)
-      : null;
+    const execCount = includeTotal ? MouvementStock.countDocuments(finalFilter) : null;
 
     const [items, total] = await Promise.all([execList, execCount]);
 
     if (includeTotal) {
-      res.json({
-        items,
-        total,
-        page,
-        limit,
-        sortBy,
-        order: order === 1 ? "asc" : "desc",
-      });
+      res.json({ items, total, page, limit, sortBy, order: order === 1 ? 'asc' : 'desc' });
       return;
     }
 
     res.json(items);
     return;
   } catch (err: any) {
-    res
-      .status(err?.status ?? 500)
-      .json({ message: err?.message ?? "Erreur interne" });
+    res.status(err?.status ?? 500).json({ message: err?.message ?? 'Erreur interne' });
     return;
   }
 };
+
+
 
 /* ----------------------------------- USER --------------------------------- */
 // GET "/byUser/:userId"

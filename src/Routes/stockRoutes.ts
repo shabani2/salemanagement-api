@@ -23,7 +23,7 @@ stockRouter.get("/", authenticate, getAllStocks);
 stockRouter.get("/:id", authenticate, getStockById);
 stockRouter.get("/region/:regionId", authenticate, getStocksByRegion);
 stockRouter.get(
-  "/stock-by-pv/:pointVenteId",
+  "/point-vente/:pointVenteId",
   authenticate,
   getStocksByPointVente,
 );

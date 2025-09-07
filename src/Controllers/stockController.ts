@@ -1,3 +1,4 @@
+// Controllers/stock Controller
 import { Request, Response } from "express";
 import { PointVente, Stock } from "../Models/model";
 import { Types } from "mongoose";
@@ -75,59 +76,86 @@ export const getAllStocks = async (req: Request, res: Response) => {
   }
 };
 
-/** ===========================================================
- * GET /stocks/region/:regionId
- * - Filtre région (région directe OU région du point de vente)
- * - Tri par dernière modif
- * - Déduplication (dernier état par couple produit/emplacement)
- * =========================================================== */
+/** =========================================================== **/
+
+// ✅ Correction robuste: inclure les stocks des PV appartenant à la région
+//    via un $lookup, pour éviter tout mismatch de types/casts.
 export const getStocksByRegion = async (req: Request, res: Response) => {
   try {
-    const { regionId } = req.params;
+    const { regionId } = req.params as { regionId?: string };
 
     if (!regionId || !Types.ObjectId.isValid(regionId)) {
       res.status(400).json({ message: "ID de région invalide" });
-    }
-    const regionObjId = new Types.ObjectId(regionId);
-
-    // 1) IDs des PV de la région (forcés en ObjectId)
-    const pvIdsRaw = await PointVente.find({ region: regionObjId }).distinct(
-      "_id",
-    );
-    const pvIds = pvIdsRaw.map((id: any) => new Types.ObjectId(id));
-
-    // DEBUG utile
-    console.log("[getStocksByRegion] regionId:", regionId, "pvIds:", pvIds);
-
-    // 2) Requête: stocks régionaux OU stocks des PV de cette région
-    const query: any = {
-      $or: [{ region: regionObjId }],
-    };
-    if (pvIds.length > 0) {
-      query.$or.push({ pointVente: { $in: pvIds } });
+      return;
     }
 
-    // 3) Lecture
-    const stocks = await Stock.find(query)
+    const regionObjId = new Types.ObjectId(String(regionId));
+
+    // Optionnel: restreindre à un PV précis via query ?pointVente=
+    const qPv = (req.query.pointVente as string | undefined)?.trim();
+    const pvFilterId = qPv && Types.ObjectId.isValid(qPv)
+      ? new Types.ObjectId(qPv)
+      : undefined;
+
+    // 1) On sélectionne les stocks:
+    //    - soit rattachés directement à la région (stock.region == regionId)
+    //    - soit rattachés à un PV (stock.pointVente != null)
+    // 2) On $lookup le PV pour connaître sa région, puis on filtre
+    //    sur pv.region == regionId.
+    const matchedIds: { _id: Types.ObjectId }[] = await Stock.aggregate([
+      {
+        $match: {
+          $or: [
+            { region: regionObjId },
+            { pointVente: { $exists: true, $ne: null } },
+          ],
+        },
+      },
+      {
+        $lookup: {
+          from: "pointventes",
+          localField: "pointVente",
+          foreignField: "_id",
+          as: "pv",
+        },
+      },
+      { $addFields: { pvRegion: { $arrayElemAt: ["$pv.region", 0] } } },
+      {
+        $match: {
+          $or: [
+            { region: regionObjId },
+            { pvRegion: regionObjId },
+          ],
+          ...(pvFilterId ? { pointVente: pvFilterId } : {}),
+        },
+      },
+      { $project: { _id: 1 } },
+    ]);
+
+    // Rien trouvé → tableau vide
+    if (!matchedIds.length) {
+      res.json([]);
+      return;
+    }
+
+    // 3) On recharge proprement avec populate, tri, puis déduplication.
+    const ids = matchedIds.map((d) => d._id);
+
+    const stocks = await Stock.find({ _id: { $in: ids } })
       .sort({ updatedAt: -1, createdAt: -1, _id: -1 })
-      .populate({
-        path: "produit",
-        populate: { path: "categorie", model: "Categorie" },
-      })
-      .populate({
-        path: "pointVente",
-        populate: { path: "region", model: "Region" },
-      })
-      .populate("region");
+      .populate({ path: "produit", populate: { path: "categorie", model: "Categorie" } })
+      .populate({ path: "pointVente", populate: { path: "region", model: "Region" } })
+      .populate("region")
+      .lean();
 
-    // 4) Déduplication dernière version
     // @ts-ignore
     const uniques = collapseLatest(stocks);
-
     res.json(uniques);
+    return;
   } catch (err) {
-    console.error("getStocksByRegion error:", err);
+    console.error("[getStocksByRegion] error:", err);
     res.status(500).json({ message: "Erreur interne", error: err });
+    return;
   }
 };
 
@@ -223,8 +251,10 @@ export const createStock = async (req: Request, res: Response) => {
 
     await stock.save();
     res.status(201).json(stock);
+    return;
   } catch (err) {
     res.status(400).json({ message: "Erreur lors de la création", error: err });
+    return;
   }
 };
 
@@ -260,10 +290,12 @@ export const updateStock = async (req: Request, res: Response) => {
     }
 
     res.json(updated);
+    return;
   } catch (err) {
     res
       .status(400)
       .json({ message: "Erreur lors de la mise à jour", error: err });
+    return;
   }
 };
 
@@ -273,8 +305,10 @@ export const deleteStock = async (req: Request, res: Response) => {
     const { id } = req.params;
     await Stock.findByIdAndDelete(id);
     res.json({ message: "Stock supprimé avec succès" });
+    return;
   } catch (err) {
     res.status(500).json({ message: "Erreur interne", error: err });
+    return;
   }
 };
 
@@ -338,6 +372,7 @@ export const checkStockHandler = async (req: Request, res: Response) => {
   // ⚠️ early return
   if (!type || !produitId || quantite == null) {
     res.status(400).json({ success: false, message: "Paramètres manquants" });
+    return; // ✅ important
   }
 
   // normaliser/filtrer les scopes
@@ -351,10 +386,10 @@ export const checkStockHandler = async (req: Request, res: Response) => {
   const scope = depotCentral
     ? { depotCentral: true }
     : regionId
-      ? { regionId }
-      : pointVenteId
-        ? { pointVenteId }
-        : undefined;
+    ? { regionId }
+    : pointVenteId
+    ? { pointVenteId }
+    : undefined;
 
   try {
     const quantiteDisponible = await checkStock({
@@ -370,7 +405,9 @@ export const checkStockHandler = async (req: Request, res: Response) => {
       quantiteDisponible,
       suffisant: quantiteDisponible >= Number(quantite),
     });
+    return;
   } catch (e) {
     res.status(500).json({ success: false, message: "Erreur serveur" });
+    return;
   }
 };

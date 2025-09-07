@@ -18,6 +18,7 @@ import {
 import bcrypt from "bcryptjs";
 import {
   adjustStock,
+  attachMouvementHooks,
   computeLivraisonScopes,
   computeOperationSource,
 } from "../Middlewares/operationHandler";
@@ -268,62 +269,56 @@ MouvementStockSchema.post("save", async function (doc) {
 });
 
 // On doit comparer ancien vs nouveau statut
-MouvementStockSchema.pre("findOneAndUpdate", async function (next) {
+MouvementStockSchema.pre("save", async function (next) {
   try {
-    // on mémorise l’ancien doc pour détecter la transition
-    (this as any)._oldDoc = await (this.model as any)
-      .findOne(this.getQuery())
-      .lean()
-      .exec();
-    next();
-  } catch (e) {
-    next(e as mongoose.CallbackError);
-  }
-});
+    const { type, statut, produit, quantite } = this as any;
 
-MouvementStockSchema.post("findOneAndUpdate", async function (resDoc: any) {
-  try {
-    if (!resDoc) return;
-    const oldDoc = (this as any)._oldDoc as any;
-    const newDoc = await (this.model as any).findById(resDoc._id).lean().exec();
-    if (!oldDoc || !newDoc) return;
+    // Entrée & Commande: pas de contrôle de dispo
+    if (type === "Entrée" || type === "Commande") return next();
 
-    // Transition false -> true ?
-    const wasFalse = !oldDoc.statut;
-    const isTrue = !!newDoc.statut;
+    // LIVRAISON: vérifier le stock de la *source* uniquement
+    if (type === "Livraison") {
+      const { source, reasonIfInvalid } = computeLivraisonScopes(this);
+      if (!source)
+        return next(new Error(reasonIfInvalid || "Livraison invalide"));
 
-    if (newDoc.type !== "Livraison") return;
-    if (!(wasFalse && isTrue)) return;
-
-    // Créditer la destination si pas encore fait
-    if (newDoc.transferApplied) return;
-
-    const { produit, quantite, montant } = newDoc;
-    const { destination, reasonIfInvalid } = computeLivraisonScopes(newDoc);
-    if (!destination) {
-      console.error(reasonIfInvalid || "Livraison sans destination à l’update");
-      return;
+      const srcStock = await Stock.findOne(source).lean().exec();
+      if (!srcStock || srcStock.quantite < quantite) {
+        return next(new Error("Stock source insuffisant pour la livraison"));
+      }
+      return next();
     }
 
-    await adjustStock(destination, quantite, montant);
-    await (this.model as any).updateOne(
-      { _id: newDoc._id, transferApplied: { $ne: true } },
-      { $set: { transferApplied: true } },
-    );
-  } catch (err) {
-    console.error("Erreur post-update MouvementStock:", err);
+    // VENTE / SORTIE: vérifier la source selon depotCentral/region/pointVente
+    if (["Vente", "Sortie"].includes(type)) {
+      const { source, reasonIfInvalid } = computeOperationSource(this);
+      if (!source) return next(new Error(reasonIfInvalid || "Portée invalide"));
+
+      // seulement si statut est activé, on “consomme”
+      if (statut) {
+        const s = await Stock.findOne(source).lean().exec();
+        if (!s || s.quantite < quantite) {
+          return next(new Error("Stock insuffisant pour l'opération"));
+        }
+      }
+      return next();
+    }
+
+    next();
+  } catch (error) {
+    next(error as mongoose.CallbackError);
   }
 });
 
-UserSchema.pre("save", async function (next) {
-  try {
-    if (!this.isModified("password")) return next();
-    this.password = await bcrypt.hash(this.password, 10);
-    next();
-  } catch (err) {
-    next(err as mongoose.CallbackError);
-  }
-});
+// POST-SAVE LOGIC
+
+// On doit comparer ancien vs nouveau statut
+
+
+if (!(MouvementStockSchema as any)._hooksAttached) {
+attachMouvementHooks(MouvementStockSchema);
+(MouvementStockSchema as any)._hooksAttached = true;
+}
 
 UserSchema.methods.comparePassword = async function (
   candidatePassword: string,
