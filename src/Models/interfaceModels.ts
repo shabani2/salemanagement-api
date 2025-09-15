@@ -140,8 +140,11 @@ export interface ICommande extends Document {
   user: mongoose.Types.ObjectId;
   region?: mongoose.Types.ObjectId;
   pointVente?: mongoose.Types.ObjectId;
+  requestedRegion?: mongoose.Types.ObjectId;
+  requestedPointVente?: mongoose.Types.ObjectId;
+  fournisseur?: mongoose.Types.ObjectId;
   depotCentral?: boolean;
-  produits: mongoose.Types.ObjectId[]; // tableau de références vers CommandeProduit
+  produits: mongoose.Types.ObjectId[];
   statut: "attente" | "livrée" | "annulée";
   createdAt?: Date;
   updatedAt?: Date;

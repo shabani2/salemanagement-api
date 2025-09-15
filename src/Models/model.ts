@@ -314,10 +314,9 @@ MouvementStockSchema.pre("save", async function (next) {
 
 // On doit comparer ancien vs nouveau statut
 
-
 if (!(MouvementStockSchema as any)._hooksAttached) {
-attachMouvementHooks(MouvementStockSchema);
-(MouvementStockSchema as any)._hooksAttached = true;
+  attachMouvementHooks(MouvementStockSchema);
+  (MouvementStockSchema as any)._hooksAttached = true;
 }
 
 UserSchema.methods.comparePassword = async function (
@@ -416,11 +415,24 @@ export const CommandeSchema = new Schema<ICommande>(
       ref: "User",
       required: true,
     },
+    fournisseur: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
     region: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Region",
     },
     pointVente: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "PointVente",
+    },
+    requestedRegion: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Region",
+    },
+    requestedPointVente: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "PointVente",
     },

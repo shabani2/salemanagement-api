@@ -30,7 +30,10 @@ export const adjustStock = async (
       .lean()
       .exec();
 
-    if (!res) throw new Error("Stock insuffisant: opération rejetée (négatif interdit)");
+    if (!res)
+      throw new Error(
+        "Stock insuffisant: opération rejetée (négatif interdit)",
+      );
     return;
   }
 
@@ -72,8 +75,8 @@ export function computeLivraisonScopes(doc: any): {
       destination: pointVente
         ? { produit, pointVente }
         : region
-        ? { produit, region }
-        : undefined,
+          ? { produit, region }
+          : undefined,
     };
   }
 
@@ -91,7 +94,8 @@ export function computeLivraisonScopes(doc: any): {
   }
 
   return {
-    reasonIfInvalid: "Livraison invalide: préciser depotCentral=true ou region.",
+    reasonIfInvalid:
+      "Livraison invalide: préciser depotCentral=true ou region.",
   };
 }
 
@@ -133,7 +137,8 @@ export function attachMouvementHooks(MouvementStockSchema: mongoose.Schema) {
       // LIVRAISON: vérifier le stock de la *source* uniquement
       if (type === "Livraison") {
         // Calcul à partir de l'état entrant
-        const { source, destination, reasonIfInvalid } = computeLivraisonScopes(this);
+        const { source, destination, reasonIfInvalid } =
+          computeLivraisonScopes(this);
         if (!source)
           return next(new Error(reasonIfInvalid || "Livraison invalide"));
 
@@ -146,7 +151,9 @@ export function attachMouvementHooks(MouvementStockSchema: mongoose.Schema) {
         // Si on reçoit regionId + pointVenteId, on rattache le mouvement *au point de vente* :
         // - on mémorise les portées pour post-save
         // - on reset `region` pour que le doc sauvegardé appartienne au pointVente
-        const hadRegionAndPV = !!((this as any).region && (this as any).pointVente);
+        const hadRegionAndPV = !!(
+          (this as any).region && (this as any).pointVente
+        );
         if (hadRegionAndPV) {
           (this as any)._livraisonScopes = { source, destination };
           (this as any).set?.("region", undefined);
@@ -159,7 +166,8 @@ export function attachMouvementHooks(MouvementStockSchema: mongoose.Schema) {
       // VENTE / SORTIE: vérifier la source selon depotCentral/region/pointVente
       if (["Vente", "Sortie"].includes(type)) {
         const { source, reasonIfInvalid } = computeOperationSource(this);
-        if (!source) return next(new Error(reasonIfInvalid || "Portée invalide"));
+        if (!source)
+          return next(new Error(reasonIfInvalid || "Portée invalide"));
 
         if (statut) {
           const s = await Stock.findOne(source).lean().exec();
@@ -179,19 +187,17 @@ export function attachMouvementHooks(MouvementStockSchema: mongoose.Schema) {
   // POST SAVE
   MouvementStockSchema.post("save", async function (doc) {
     try {
-      const {
-        produit,
-        quantite,
-        type,
-        statut,
-        montant,
-        transferApplied,
-      } = doc as any;
+      const { produit, quantite, type, statut, montant, transferApplied } =
+        doc as any;
 
       // ENTRÉE: on crédite directement la destination (region sinon central)
       if (type === "Entrée") {
         if ((doc as any).region)
-          await adjustStock({ produit, region: (doc as any).region }, quantite, montant);
+          await adjustStock(
+            { produit, region: (doc as any).region },
+            quantite,
+            montant,
+          );
         else
           await adjustStock({ produit, depotCentral: true }, quantite, montant);
         return;
@@ -214,7 +220,7 @@ export function attachMouvementHooks(MouvementStockSchema: mongoose.Schema) {
         const memo = (doc as any)._livraisonScopes as
           | { source?: AdjustStockFilter; destination?: AdjustStockFilter }
           | undefined;
-          //@ts-ignore
+        //@ts-ignore
         const { source, destination, reasonIfInvalid } =
           memo ?? computeLivraisonScopes(doc);
         if (!source) return console.error(reasonIfInvalid);
@@ -255,7 +261,10 @@ export function attachMouvementHooks(MouvementStockSchema: mongoose.Schema) {
     try {
       if (!resDoc) return;
       const oldDoc = (this as any)._oldDoc as any;
-      const newDoc = await (this.model as any).findById(resDoc._id).lean().exec();
+      const newDoc = await (this.model as any)
+        .findById(resDoc._id)
+        .lean()
+        .exec();
       if (!oldDoc || !newDoc) return;
 
       // Transition false -> true ?
@@ -270,7 +279,9 @@ export function attachMouvementHooks(MouvementStockSchema: mongoose.Schema) {
 
       const { destination, reasonIfInvalid } = computeLivraisonScopes(newDoc);
       if (!destination) {
-        console.error(reasonIfInvalid || "Livraison sans destination à l’update");
+        console.error(
+          reasonIfInvalid || "Livraison sans destination à l’update",
+        );
         return;
       }
 

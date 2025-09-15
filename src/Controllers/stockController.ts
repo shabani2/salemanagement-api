@@ -93,9 +93,8 @@ export const getStocksByRegion = async (req: Request, res: Response) => {
 
     // Optionnel: restreindre à un PV précis via query ?pointVente=
     const qPv = (req.query.pointVente as string | undefined)?.trim();
-    const pvFilterId = qPv && Types.ObjectId.isValid(qPv)
-      ? new Types.ObjectId(qPv)
-      : undefined;
+    const pvFilterId =
+      qPv && Types.ObjectId.isValid(qPv) ? new Types.ObjectId(qPv) : undefined;
 
     // 1) On sélectionne les stocks:
     //    - soit rattachés directement à la région (stock.region == regionId)
@@ -122,10 +121,7 @@ export const getStocksByRegion = async (req: Request, res: Response) => {
       { $addFields: { pvRegion: { $arrayElemAt: ["$pv.region", 0] } } },
       {
         $match: {
-          $or: [
-            { region: regionObjId },
-            { pvRegion: regionObjId },
-          ],
+          $or: [{ region: regionObjId }, { pvRegion: regionObjId }],
           ...(pvFilterId ? { pointVente: pvFilterId } : {}),
         },
       },
@@ -143,8 +139,14 @@ export const getStocksByRegion = async (req: Request, res: Response) => {
 
     const stocks = await Stock.find({ _id: { $in: ids } })
       .sort({ updatedAt: -1, createdAt: -1, _id: -1 })
-      .populate({ path: "produit", populate: { path: "categorie", model: "Categorie" } })
-      .populate({ path: "pointVente", populate: { path: "region", model: "Region" } })
+      .populate({
+        path: "produit",
+        populate: { path: "categorie", model: "Categorie" },
+      })
+      .populate({
+        path: "pointVente",
+        populate: { path: "region", model: "Region" },
+      })
       .populate("region")
       .lean();
 
@@ -386,10 +388,10 @@ export const checkStockHandler = async (req: Request, res: Response) => {
   const scope = depotCentral
     ? { depotCentral: true }
     : regionId
-    ? { regionId }
-    : pointVenteId
-    ? { pointVenteId }
-    : undefined;
+      ? { regionId }
+      : pointVenteId
+        ? { pointVenteId }
+        : undefined;
 
   try {
     const quantiteDisponible = await checkStock({
