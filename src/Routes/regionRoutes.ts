@@ -24,6 +24,7 @@ router.get(
   authorize(["SuperAdmin", "AdminRegion"]),
   searchRegions,
 );
+router.get("/:id", authenticate, getRegionById);
 router.post(
   "/",
   authenticate,

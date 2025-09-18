@@ -6,8 +6,6 @@ import { AuthenticatedRequest } from "../Middlewares/auth";
 import { uploadFile } from "../services/uploadService";
 import { MulterRequest } from "../Models/multerType";
 
-
-
 export const getAllUsers = async (req: Request, res: Response) => {
   try {
     const page = Math.max(1, Number(req.query.page) || 1);
@@ -25,8 +23,8 @@ export const getAllUsers = async (req: Request, res: Response) => {
       sortBy === "region.nom"
         ? "regionNom"
         : sortBy === "pointVente.nom"
-        ? "pointVenteNom"
-        : sortBy;
+          ? "pointVenteNom"
+          : sortBy;
 
     const basePipeline: any[] = [
       ...(role ? [{ $match: { role } }] : []),
@@ -213,7 +211,7 @@ export const getAllUsers = async (req: Request, res: Response) => {
       { $limit: limit },
     ]).allowDiskUse(true);
 
-     res.json({
+    res.json({
       data,
       meta: {
         page,
@@ -230,7 +228,6 @@ export const getAllUsers = async (req: Request, res: Response) => {
   }
 };
 
-
 // --- le reste de ton contrôleur inchangé ---
 
 export const getUsersByRegion = async (
@@ -245,13 +242,13 @@ export const getUsersByRegion = async (
       "";
 
     if (!regionId || !Types.ObjectId.isValid(regionId)) {
-       res.status(400).json({ message: "regionId invalide" });
+      res.status(400).json({ message: "regionId invalide" });
     }
 
     (req.query as any).region = regionId;
-     getAllUsers(req as unknown as Request, res);
+    getAllUsers(req as unknown as Request, res);
   } catch (err) {
-     res.status(500).json({ message: "Erreur interne", error: err });
+    res.status(500).json({ message: "Erreur interne", error: err });
   }
 };
 
@@ -262,7 +259,7 @@ export const getUsersByPointVente = async (req: Request, res: Response) => {
       res.status(400).json({ message: "ID du point de vente invalide" });
     }
     (req.query as any).pointVente = pointVenteId;
-     getAllUsers(req, res);
+    getAllUsers(req, res);
   } catch (err) {
     console.error("Erreur dans getUsersByPointVente:", err);
     res.status(500).json({ message: "Erreur interne", error: err });

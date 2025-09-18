@@ -9,16 +9,13 @@ const express_1 = __importDefault(require("express"));
 const auth_1 = require("../Middlewares/auth");
 const commandeController_1 = require("../Controllers/commandeController");
 const commandeRouter = express_1.default.Router();
+// List + filtres (requestedRegion, requestedPointVente, fournisseur, etc.)
 commandeRouter.get(
   "/",
   auth_1.authenticate,
   commandeController_1.getAllCommandes,
 );
-commandeRouter.get(
-  "/:id",
-  auth_1.authenticate,
-  commandeController_1.getCommandeById,
-);
+// Scopes dédiés
 commandeRouter.get(
   "/by-user/:userId",
   auth_1.authenticate,
@@ -33,6 +30,32 @@ commandeRouter.get(
   "/by-region/:regionId",
   auth_1.authenticate,
   commandeController_1.getCommandesByRegion,
+);
+commandeRouter.get(
+  "/by-requested-region/:requestedRegionId",
+  auth_1.authenticate,
+  commandeController_1.getCommandesByRequestedRegion,
+);
+commandeRouter.get(
+  "/by-requested-point-vente/:requestedPointVenteId",
+  auth_1.authenticate,
+  commandeController_1.getCommandesByRequestedPointVente,
+);
+commandeRouter.get(
+  "/by-fournisseur/:fournisseurId",
+  auth_1.authenticate,
+  commandeController_1.getCommandesByFournisseur,
+);
+// CRUD + print
+commandeRouter.get(
+  "/:id",
+  auth_1.authenticate,
+  commandeController_1.getCommandeById,
+);
+commandeRouter.get(
+  "/:id/print",
+  auth_1.authenticate,
+  commandeController_1.printCommande,
 );
 commandeRouter.post(
   "/",
@@ -49,5 +72,4 @@ commandeRouter.delete(
   auth_1.authenticate,
   commandeController_1.deleteCommande,
 );
-commandeRouter.get("/:id/print", commandeController_1.printCommande);
 exports.default = commandeRouter;

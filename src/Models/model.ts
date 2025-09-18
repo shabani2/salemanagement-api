@@ -418,7 +418,6 @@ export const CommandeSchema = new Schema<ICommande>(
     fournisseur: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
     },
     region: {
       type: mongoose.Schema.Types.ObjectId,

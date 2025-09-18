@@ -1,5 +1,6 @@
 "use strict";
-// controllers/commandeController.ts
+// /src/controllers/commandeController.ts
+// Contrôleur Commande — complet, sans `return res(...)`, avec filtres requestedRegion/requestedPointVente/fournisseur
 var __awaiter =
   (this && this.__awaiter) ||
   function (thisArg, _arguments, P, generator) {
@@ -50,89 +51,266 @@ var __rest =
       }
     return t;
   };
+var __importDefault =
+  (this && this.__importDefault) ||
+  function (mod) {
+    return mod && mod.__esModule ? mod : { default: mod };
+  };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.printCommande =
   exports.deleteCommande =
   exports.updateCommande =
   exports.createCommande =
   exports.getCommandeById =
+  exports.getCommandesByFournisseur =
+  exports.getCommandesByRequestedPointVente =
+  exports.getCommandesByRequestedRegion =
   exports.getCommandesByRegion =
   exports.getCommandesByPointVente =
   exports.getCommandesByUser =
   exports.getAllCommandes =
     void 0;
+exports.pickDefined = pickDefined;
+const mongoose_1 = __importDefault(require("mongoose"));
 const model_1 = require("../Models/model");
 const generateCommandePdf_1 = require("./generateCommandePdf");
+/**
+PSEUDOCODE (plan court)
+1) Helpers: HttpError, pagination, parse & build filters, unions Source/Destination, resolveRouting.
+2) formatCommande(): populate produits->produit, calc montant/lignes/tauxLivraison.
+3) GET: all (avec filtres query), by user, by pointVente, by region (inclut source/dest et PV rattachés), by requestedRegion, by requestedPointVente, by fournisseur, by id.
+4) POST create: valider resolveRouting, créer commande + lignes, option PDF.
+5) PUT update: valider routing simulé, MAJ lignes + mouvements stock si "livré", MAJ statut commande.
+6) DELETE, PRINT.
+Note: Aucune fonction ne fait `return res(...)` pour éviter les confusions d'overload Express.
+*/
+// ---------------------------------------------------------
+// Types & constants
+// ---------------------------------------------------------
+const SOURCE = ["PV", "REGION", "CENTRAL"];
+const DESTINATION = ["REGION", "PV", "CENTRAL", "FOURNISSEUR"];
+const allowedStatuts = new Set(["attente", "livrée", "annulée"]);
+// ---------------------------------------------------------
+// Utils
+// ---------------------------------------------------------
+class HttpError extends Error {
+  constructor(status, message) {
+    super(message);
+    this.status = status;
+  }
+}
 const getPaginationOptions = (req) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
   const skip = (page - 1) * limit;
   return { page, limit, skip };
 };
+const isValidObjectId = (id) =>
+  typeof id === "string" && mongoose_1.default.Types.ObjectId.isValid(id);
+const parseBool = (v) => (typeof v === "string" ? v === "true" : !!v);
+const buildCommandeFilters = (req) => {
+  const q = req.query;
+  const filter = {};
+  if (isValidObjectId(q.user)) filter.user = q.user;
+  if (isValidObjectId(q.region)) filter.region = q.region;
+  if (isValidObjectId(q.pointVente)) filter.pointVente = q.pointVente;
+  if (isValidObjectId(q.requestedRegion))
+    filter.requestedRegion = q.requestedRegion;
+  if (isValidObjectId(q.requestedPointVente))
+    filter.requestedPointVente = q.requestedPointVente;
+  if (isValidObjectId(q.fournisseur)) filter.fournisseur = q.fournisseur;
+  if (q.numero) filter.numero = q.numero;
+  if (typeof q.depotCentral !== "undefined")
+    filter.depotCentral = parseBool(q.depotCentral);
+  if (q.statut && allowedStatuts.has(q.statut)) filter.statut = q.statut;
+  if (q.createdFrom || q.createdTo) {
+    filter.createdAt = {};
+    if (q.createdFrom) filter.createdAt.$gte = new Date(q.createdFrom);
+    if (q.createdTo) filter.createdAt.$lte = new Date(q.createdTo);
+  }
+  return filter;
+};
 const commonPopulate = [
   { path: "user", select: "-password" },
+  { path: "fournisseur", select: "-password" },
   { path: "region" },
+  { path: "requestedRegion" },
+  { path: "pointVente", populate: { path: "region", model: "Region" } },
   {
-    path: "pointVente",
+    path: "requestedPointVente",
     populate: { path: "region", model: "Region" },
   },
 ];
+function pickDefined(obj) {
+  const out = {};
+  for (const k of Object.keys(obj)) {
+    const v = obj[k];
+    if (v !== undefined) {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+// ---------------------------------------------------------
+// Routing rules
+// ---------------------------------------------------------
+function resolveRouting(body) {
+  const hasReqPV = !!body.requestedPointVente;
+  const hasReqReg = !!body.requestedRegion;
+  const hasFournisseur = !!body.fournisseur;
+  const hasDestRegion = !!body.region;
+  const hasDestPV = !!body.pointVente;
+  const depotCentral = body.depotCentral === true;
+  const centralAsDest = depotCentral && !hasDestRegion && !hasDestPV;
+  const centralAsSource =
+    depotCentral && (hasDestRegion || hasDestPV) && !hasReqPV && !hasReqReg;
+  const sourceCount = [hasReqPV, hasReqReg, centralAsSource].filter(
+    Boolean,
+  ).length;
+  const destCount = [
+    hasDestRegion,
+    hasDestPV,
+    centralAsDest,
+    hasFournisseur,
+  ].filter(Boolean).length;
+  if (sourceCount !== 1)
+    throw new HttpError(
+      400,
+      "Définissez exactement une source (requestedPointVente | requestedRegion | depotCentral=true source).",
+    );
+  if (destCount !== 1)
+    throw new HttpError(
+      400,
+      "Définissez exactement une destination (region | pointVente | depotCentral=true destination | fournisseur).",
+    );
+  if (hasFournisseur && (hasDestRegion || hasDestPV || centralAsDest))
+    throw new HttpError(
+      400,
+      "'fournisseur' est exclusif aux destinations internes.",
+    );
+  if (centralAsSource && centralAsDest)
+    throw new HttpError(
+      400,
+      "depotCentral ne peut pas être simultanément source et destination.",
+    );
+  const source = hasReqPV ? "PV" : hasReqReg ? "REGION" : "CENTRAL";
+  let destination;
+  if (hasFournisseur) destination = "FOURNISSEUR";
+  else if (hasDestRegion) destination = "REGION";
+  else if (hasDestPV) destination = "PV";
+  else destination = "CENTRAL";
+  if (source === "PV") {
+    if (!["REGION", "CENTRAL", "FOURNISSEUR"].includes(destination)) {
+      throw new HttpError(
+        400,
+        "PV → seulement REGION | CENTRAL | FOURNISSEUR.",
+      );
+    }
+    if (destination === "PV") throw new HttpError(400, "PV → PV interdit.");
+  }
+  if (source === "REGION") {
+    if (!["CENTRAL", "REGION", "PV", "FOURNISSEUR"].includes(destination)) {
+      throw new HttpError(
+        400,
+        "REGION → seulement CENTRAL | REGION | PV | FOURNISSEUR.",
+      );
+    }
+  }
+  if (source === "CENTRAL") {
+    if (!["REGION", "PV", "FOURNISSEUR"].includes(destination)) {
+      throw new HttpError(
+        400,
+        "CENTRAL → seulement REGION | PV | FOURNISSEUR.",
+      );
+    }
+    if (destination === "CENTRAL")
+      throw new HttpError(400, "CENTRAL → CENTRAL interdit.");
+  }
+  if (destination !== "FOURNISSEUR") {
+    if (destination === "CENTRAL" && !centralAsDest)
+      throw new HttpError(
+        400,
+        "Pour destination CENTRAL, mettre depotCentral=true sans region/pointVente.",
+      );
+    if (destination === "REGION" && !hasDestRegion)
+      throw new HttpError(400, "Destination région manquante.");
+    if (destination === "PV" && !hasDestPV)
+      throw new HttpError(400, "Destination point de vente manquante.");
+  }
+  return { source, destination };
+}
+// ---------------------------------------------------------
+// Derivatives
+// ---------------------------------------------------------
 const formatCommande = (commande) =>
   __awaiter(void 0, void 0, void 0, function* () {
+    var _a, _b, _c;
     yield commande.populate({
       path: "produits",
-      populate: {
-        path: "produit",
-        model: "Produit",
-      },
+      populate: { path: "produit", model: "Produit" },
     });
     let montant = 0;
-    let nombreCommandeProduit = 0;
-    let livrés = 0;
-    commande.produits.forEach((cp) => {
-      var _a, _b, _c;
+    let lignes = 0;
+    let lignesLivrees = 0;
+    for (const cp of commande.produits) {
       const prix =
         (_b =
-          (_a = cp.produit) === null || _a === void 0 ? void 0 : _a.prix) !==
-          null && _b !== void 0
+          (_a = cp === null || cp === void 0 ? void 0 : cp.produit) === null ||
+          _a === void 0
+            ? void 0
+            : _a.prix) !== null && _b !== void 0
           ? _b
           : 0;
-      const quantite = (_c = cp.quantite) !== null && _c !== void 0 ? _c : 0;
+      const quantite =
+        (_c = cp === null || cp === void 0 ? void 0 : cp.quantite) !== null &&
+        _c !== void 0
+          ? _c
+          : 0;
       montant += prix * quantite;
-      if (cp.statut === "livré") livrés += quantite;
-    });
-    nombreCommandeProduit += commande.produits.length;
+      lignes += 1;
+      if ((cp === null || cp === void 0 ? void 0 : cp.statut) === "livré")
+        lignesLivrees += 1;
+    }
     const tauxLivraison =
-      nombreCommandeProduit > 0
-        ? Math.round((livrés / nombreCommandeProduit) * 100)
-        : 0;
+      lignes > 0 ? Math.round((lignesLivrees / lignes) * 100) : 0;
     return Object.assign(Object.assign({}, commande.toObject()), {
       montant,
-      nombreCommandeProduit,
+      nombreCommandeProduit: lignes,
       tauxLivraison,
     });
   });
+// Helper: tri par défaut (pour voir les plus récentes en premier)
+const applySort = (req) => {
+  const sortBy = req.query.sortBy || "createdAt";
+  const order = req.query.order === "asc" ? 1 : -1;
+  // pourquoi: _id comme tie-breaker pour stabilité
+  return sortBy === "createdAt"
+    ? { createdAt: order, _id: order }
+    : { [sortBy]: order, _id: -1 };
+};
 const getAllCommandes = (req, res) =>
   __awaiter(void 0, void 0, void 0, function* () {
     try {
       const { skip, limit } = getPaginationOptions(req);
-      const commandes = yield model_1.Commande.find()
-        .skip(skip)
-        .limit(limit)
-        .populate("user", "-password")
-        .populate("region")
-        .populate({
-          path: "pointVente",
-          populate: { path: "region", model: "Region" },
-        });
-      const total = yield model_1.Commande.countDocuments();
+      const filters = buildCommandeFilters(req);
+      const sort = applySort(req);
+      const [commandes, total] = yield Promise.all([
+        model_1.Commande.find(filters)
+          .sort(sort)
+          .skip(skip)
+          .limit(limit)
+          .populate(commonPopulate),
+        model_1.Commande.countDocuments(filters),
+      ]);
       const formatted = yield Promise.all(commandes.map(formatCommande));
       res.status(200).json({ total, commandes: formatted });
     } catch (error) {
-      res.status(400).json({
-        message: "Erreur lors de la récupération des commandes.",
-        error: error.message,
-      });
+      res
+        .status(400)
+        .json({
+          message: "Erreur lors de la récupération des commandes.",
+          error: error.message,
+        });
     }
   });
 exports.getAllCommandes = getAllCommandes;
@@ -141,51 +319,83 @@ const getCommandesByUser = (req, res) =>
     try {
       const { userId } = req.params;
       const { skip, limit } = getPaginationOptions(req);
-      const commandes = yield model_1.Commande.find({ user: userId })
-        .skip(skip)
-        .limit(limit)
-        .populate("user", "-password")
-        .populate("region")
-        .populate({
-          path: "pointVente",
-          populate: { path: "region", model: "Region" },
-        });
-      const total = yield model_1.Commande.countDocuments({ user: userId });
+      const sort = applySort(req);
+      const [commandes, total] = yield Promise.all([
+        model_1.Commande.find({ user: userId })
+          .sort(sort)
+          .skip(skip)
+          .limit(limit)
+          .populate(commonPopulate),
+        model_1.Commande.countDocuments({ user: userId }),
+      ]);
       const formatted = yield Promise.all(commandes.map(formatCommande));
       res.status(200).json({ total, commandes: formatted });
     } catch (error) {
-      res.status(400).json({
-        message: "Erreur lors de la récupération des commandes utilisateur.",
-        error: error.message,
-      });
+      res
+        .status(400)
+        .json({
+          message: "Erreur lors de la récupération des commandes utilisateur.",
+          error: error.message,
+        });
     }
   });
 exports.getCommandesByUser = getCommandesByUser;
+// /src/controllers/commandeController.ts  (extraits à remplacer)
+// -------------------------- Helpers de portée --------------------------
+const buildQueryForPointVente = (pointVenteId) => ({
+  $or: [
+    { pointVente: pointVenteId }, // destinataire = ce PV
+    { requestedPointVente: pointVenteId }, // source = ce PV
+  ],
+});
+const buildQueryForRegion = (regionId) =>
+  __awaiter(void 0, void 0, void 0, function* () {
+    // IDs des PV rattachés à cette région
+    const pvIds = yield model_1.PointVente.find({ region: regionId }).distinct(
+      "_id",
+    );
+    return {
+      $or: [
+        { region: regionId }, // destinataire = la région
+        { requestedRegion: regionId }, // source = la région
+        { pointVente: { $in: pvIds } }, // destinataire = PV de la région
+        { requestedPointVente: { $in: pvIds } }, // source = PV de la région
+      ],
+    };
+  });
+// -------------------------- Handlers mis à jour --------------------------
 const getCommandesByPointVente = (req, res) =>
   __awaiter(void 0, void 0, void 0, function* () {
     try {
       const { pointVenteId } = req.params;
       const { skip, limit } = getPaginationOptions(req);
-      const commandes = yield model_1.Commande.find({
-        pointVente: pointVenteId,
-      })
-        .skip(skip)
-        .limit(limit)
-        .populate("user", "-password")
-        .populate("region")
-        .populate({
-          path: "pointVente",
-          populate: { path: "region", model: "Region" },
-        });
-      const total = yield model_1.Commande.countDocuments({
-        pointVente: pointVenteId,
-      });
+      const sort = applySort(req);
+      if (!isValidObjectId(pointVenteId)) {
+        res.status(400).json({ message: "Paramètre pointVenteId invalide." });
+        return;
+      }
+      const query = buildQueryForPointVente(pointVenteId);
+      const [commandes, total] = yield Promise.all([
+        model_1.Commande.find(query)
+          .sort(sort)
+          .skip(skip)
+          .limit(limit)
+          .populate(commonPopulate),
+        model_1.Commande.countDocuments(query),
+      ]);
       const formatted = yield Promise.all(commandes.map(formatCommande));
-      res.status(200).json({ total, commandes: formatted });
+      res
+        .status(200)
+        .json({
+          total,
+          commandes: formatted,
+          page: Math.floor(skip / limit) + 1,
+          limit,
+        });
     } catch (error) {
       res.status(400).json({
         message:
-          "Erreur lors de la récupération des commandes par point de vente.",
+          "Erreur lors de la récupération des commandes par point de vente (source ou destination).",
         error: error.message,
       });
     }
@@ -196,53 +406,130 @@ const getCommandesByRegion = (req, res) =>
     try {
       const { regionId } = req.params;
       const { skip, limit } = getPaginationOptions(req);
-      // 1. Récupérer toutes les commandes liées à cette région ou ayant un pointVente
-      const commandes = yield model_1.Commande.find({
-        $or: [{ region: regionId }, { pointVente: { $ne: null } }],
-      })
-        .skip(skip)
-        .limit(limit)
-        .populate(commonPopulate);
-      // 2. Filtrer en JS selon la condition réelle de correspondance
-      const filtered = commandes.filter((cmd) => {
-        var _a, _b, _c;
-        return (
-          ((_b =
-            (_a = cmd.region) === null || _a === void 0 ? void 0 : _a._id) ===
-            null || _b === void 0
-            ? void 0
-            : _b.toString()) === regionId ||
-          (cmd.pointVente &&
-            typeof cmd.pointVente === "object" &&
-            "region" in cmd.pointVente &&
-            cmd.pointVente.region &&
-            typeof cmd.pointVente.region === "object" &&
-            ((_c = cmd.pointVente.region._id) === null || _c === void 0
-              ? void 0
-              : _c.toString()) === regionId)
-        );
-      });
-      const formatted = yield Promise.all(filtered.map(formatCommande));
-      res.status(200).json({ total: filtered.length, commandes: formatted });
+      const sort = applySort(req);
+      if (!isValidObjectId(regionId)) {
+        res.status(400).json({ message: "Paramètre regionId invalide." });
+        return;
+      }
+      const query = yield buildQueryForRegion(regionId);
+      const [commandes, total] = yield Promise.all([
+        model_1.Commande.find(query)
+          .sort(sort)
+          .skip(skip)
+          .limit(limit)
+          .populate(commonPopulate),
+        model_1.Commande.countDocuments(query),
+      ]);
+      const formatted = yield Promise.all(commandes.map(formatCommande));
+      res
+        .status(200)
+        .json({
+          total,
+          commandes: formatted,
+          page: Math.floor(skip / limit) + 1,
+          limit,
+        });
     } catch (error) {
       res.status(400).json({
-        message: "Erreur lors de la récupération des commandes par région.",
+        message:
+          "Erreur lors de la récupération des commandes par région (source ou destination).",
         error: error.message,
       });
     }
   });
 exports.getCommandesByRegion = getCommandesByRegion;
+const getCommandesByRequestedRegion = (req, res) =>
+  __awaiter(void 0, void 0, void 0, function* () {
+    try {
+      const { requestedRegionId } = req.params;
+      const { skip, limit } = getPaginationOptions(req);
+      const sort = applySort(req);
+      const [commandes, total] = yield Promise.all([
+        model_1.Commande.find({ requestedRegion: requestedRegionId })
+          .sort(sort)
+          .skip(skip)
+          .limit(limit)
+          .populate(commonPopulate),
+        model_1.Commande.countDocuments({ requestedRegion: requestedRegionId }),
+      ]);
+      const formatted = yield Promise.all(commandes.map(formatCommande));
+      res.status(200).json({ total, commandes: formatted });
+    } catch (error) {
+      res
+        .status(400)
+        .json({
+          message:
+            "Erreur lors des commandes par région source (requestedRegion).",
+          error: error.message,
+        });
+    }
+  });
+exports.getCommandesByRequestedRegion = getCommandesByRequestedRegion;
+const getCommandesByRequestedPointVente = (req, res) =>
+  __awaiter(void 0, void 0, void 0, function* () {
+    try {
+      const { requestedPointVenteId } = req.params;
+      const { skip, limit } = getPaginationOptions(req);
+      const sort = applySort(req);
+      const [commandes, total] = yield Promise.all([
+        model_1.Commande.find({ requestedPointVente: requestedPointVenteId })
+          .sort(sort)
+          .skip(skip)
+          .limit(limit)
+          .populate(commonPopulate),
+        model_1.Commande.countDocuments({
+          requestedPointVente: requestedPointVenteId,
+        }),
+      ]);
+      const formatted = yield Promise.all(commandes.map(formatCommande));
+      res.status(200).json({ total, commandes: formatted });
+    } catch (error) {
+      res
+        .status(400)
+        .json({
+          message:
+            "Erreur lors des commandes par point de vente source (requestedPointVente).",
+          error: error.message,
+        });
+    }
+  });
+exports.getCommandesByRequestedPointVente = getCommandesByRequestedPointVente;
+const getCommandesByFournisseur = (req, res) =>
+  __awaiter(void 0, void 0, void 0, function* () {
+    try {
+      const { fournisseurId } = req.params;
+      const { skip, limit } = getPaginationOptions(req);
+      const sort = applySort(req);
+      const [commandes, total] = yield Promise.all([
+        model_1.Commande.find({ fournisseur: fournisseurId })
+          .sort(sort)
+          .skip(skip)
+          .limit(limit)
+          .populate(commonPopulate),
+        model_1.Commande.countDocuments({ fournisseur: fournisseurId }),
+      ]);
+      const formatted = yield Promise.all(commandes.map(formatCommande));
+      res.status(200).json({ total, commandes: formatted });
+    } catch (error) {
+      res
+        .status(400)
+        .json({
+          message: "Erreur lors des commandes par fournisseur.",
+          error: error.message,
+        });
+    }
+  });
+exports.getCommandesByFournisseur = getCommandesByFournisseur;
+// ---------------------------------------------------------
+// Handlers
+// ---------------------------------------------------------
 const getCommandeById = (req, res) =>
   __awaiter(void 0, void 0, void 0, function* () {
     try {
       const { id } = req.params;
       const commande = yield model_1.Commande.findById(id)
-        .populate("user", "-password")
-        .populate("region")
-        .populate({
-          path: "pointVente",
-          populate: { path: "region", model: "Region" },
-        });
+        .populate(commonPopulate)
+        .populate({ path: "produits", populate: { path: "produit" } });
       if (!commande) {
         res.status(404).json({ message: "Commande non trouvée." });
         return;
@@ -257,76 +544,37 @@ const getCommandeById = (req, res) =>
     }
   });
 exports.getCommandeById = getCommandeById;
-/**
- * POST /commandes
- */
-// export const createCommande = async (req: Request, res: Response) => {
-//   try {
-//     const { user, region, pointVente, depotCentral, produits } = req.body;
-//     if (!user || !produits || produits.length === 0) {
-//       res
-//         .status(400)
-//         .json({ message: "L'utilisateur et les produits sont requis." });
-//       return;
-//     }
-//     const hasPointVente = !!pointVente;
-//     const hasRegion = !!region;
-//     const hasDepotCentral = depotCentral === true;
-//     if (!hasPointVente && !hasRegion && !hasDepotCentral) {
-//       res
-//         .status(400)
-//         .json({ message: "La commande doit être liée à une localisation." });
-//       return;
-//     }
-//     // 1. Créer la commande (vide pour le moment)
-//     const numero = `CMD-${Date.now()}`;
-//     const commande = new Commande({
-//       numero,
-//       user,
-//       region,
-//       pointVente,
-//       depotCentral,
-//       produits: [], // vide au départ
-//       statut: "attente",
-//     });
-//     await commande.save();
-//     // 2. Créer les CommandeProduits avec l'ID de la commande
-//     const createdCommandeProduits = await Promise.all(
-//       produits.map(async (prod: any) => {
-//         const created = new CommandeProduit({
-//           commandeId: commande._id, // liaison ici
-//           produit: prod.produit,
-//           quantite: prod.quantite,
-//           uniteMesure: prod.uniteMesure,
-//           statut: "attente",
-//         });
-//         await created.save();
-//         return created._id;
-//       }),
-//     );
-//     // 3. Mise à jour de la commande avec les produits créés
-//     commande.produits = createdCommandeProduits;
-//     await commande.save();
-//     // 4. Renvoyer la commande peuplée
-//     const populated = await Commande.findById(commande._id)
-//       .populate("user", "-password")
-//       .populate("region")
-//       .populate({
-//         path: "pointVente",
-//         populate: { path: "region", model: "Region" },
-//       })
-//       .populate({
-//         path: "produits",
-//         populate: { path: "produit" },
-//       });
-//     res.status(201).json(populated);
-//   } catch (error) {
-//     res.status(400).json({
-//       message: "Erreur lors de la création de la commande.",
-//       error: (error as Error).message,
-//     });
-//   }
-// };
+// const pickDefined = <T extends Record<string, any>>(obj: T): Partial<T> =>
+//   Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined));
+const isValidProductItem = (it) =>
+  it &&
+  it.produit &&
+  mongoose_1.default.Types.ObjectId.isValid(String(it.produit)) &&
+  Number(it.quantite) > 0;
+const assertProduitsOr400 = (req, res) => {
+  var _a;
+  const produits =
+    (_a = req.body) === null || _a === void 0 ? void 0 : _a.produits;
+  if (!Array.isArray(produits) || produits.length === 0) {
+    res
+      .status(400)
+      .json({
+        message:
+          "Les produits sont requis et doivent être un tableau non vide.",
+      });
+    return { ok: false };
+  }
+  if (!produits.every(isValidProductItem)) {
+    res
+      .status(400)
+      .json({
+        message:
+          "Chaque produit doit contenir { produit:ObjectId, quantite>0 }.",
+      });
+    return { ok: false };
+  }
+  return { ok: true };
+};
 const createCommande = (req, res) =>
   __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -334,38 +582,37 @@ const createCommande = (req, res) =>
         user,
         region,
         pointVente,
+        requestedRegion,
+        requestedPointVente,
         depotCentral,
+        fournisseur,
         produits,
         organisation,
         print,
       } = req.body;
-      // print: bool optionnel pour forcer le PDF depuis le body
       const wantPdf = req.query.pdf === "1" || print === true;
-      if (!user || !produits || produits.length === 0) {
-        res
-          .status(400)
-          .json({ message: "L'utilisateur et les produits sont requis." });
+      if (!user) {
+        res.status(400).json({ message: "Le champ 'user' est requis." });
         return;
       }
-      const hasPointVente = !!pointVente;
-      const hasRegion = !!region;
-      const hasDepotCentral = depotCentral === true;
-      if (!hasPointVente && !hasRegion && !hasDepotCentral) {
-        res
-          .status(400)
-          .json({ message: "La commande doit être liée à une localisation." });
-        return;
-      }
+      const pv = assertProduitsOr400(req, res);
+      if (!pv.ok) return;
+      // Peut muter req.body (routage dérivé selon votre logique)
+      resolveRouting(req.body);
       const numero = `CMD-${Date.now()}`;
-      const commande = new model_1.Commande({
+      const toCreate = pickDefined({
         numero,
         user,
         region,
         pointVente,
-        depotCentral,
+        requestedRegion,
+        requestedPointVente,
+        depotCentral: !!depotCentral,
+        fournisseur,
         produits: [],
         statut: "attente",
       });
+      const commande = new model_1.Commande(toCreate);
       yield commande.save();
       const createdCommandeProduits = yield Promise.all(
         produits.map((prod) =>
@@ -384,190 +631,167 @@ const createCommande = (req, res) =>
       commande.produits = createdCommandeProduits;
       yield commande.save();
       const populated = yield model_1.Commande.findById(commande._id)
-        .populate("user", "-password")
-        .populate("region")
-        .populate({
-          path: "pointVente",
-          populate: { path: "region", model: "Region" },
-        })
-        .populate({
-          path: "produits",
-          populate: { path: "produit" },
-        });
+        .populate(commonPopulate)
+        .populate({ path: "produits", populate: { path: "produit" } });
       if (!populated) {
         res
           .status(404)
           .json({ message: "Commande introuvable après création." });
         return;
       }
-      // 👉 Si on veut un PDF immédiatement
       if (wantPdf) {
         yield (0, generateCommandePdf_1.renderCommandePdf)(res, populated, {
           organisation,
           format: req.query.format || "pos80",
         });
-        return; // on a streamé le PDF
+        return;
       }
-      // Sinon JSON standard
       res.status(201).json(populated);
     } catch (error) {
-      res.status(400).json({
+      const status =
+        (error === null || error === void 0 ? void 0 : error.status) || 400;
+      res.status(status).json({
         message: "Erreur lors de la création de la commande.",
         error: error.message,
       });
     }
   });
 exports.createCommande = createCommande;
-/**
- * PUT /commandes/:id
- */
 const updateCommande = (req, res) =>
   __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
+    var _a, _b;
     try {
       const { id } = req.params;
-      const _b = req.body,
-        { produits: produitsUpdates } = _b,
-        updateData = __rest(_b, ["produits"]);
-      // 1. Mise à jour des champs de la commande (hors produits)
+      const _c = req.body,
+        { produits: produitsUpdates } = _c,
+        updateDataRaw = __rest(_c, ["produits"]);
+      const existing = yield model_1.Commande.findById(id);
+      if (!existing) {
+        res.status(404).json({ message: "Commande non trouvée." });
+        return;
+      }
+      // On ne force aucun champ optionnel: on applique seulement les clés définies
+      const updateData = pickDefined({
+        user: updateDataRaw.user,
+        region: updateDataRaw.region,
+        pointVente: updateDataRaw.pointVente,
+        requestedRegion: updateDataRaw.requestedRegion,
+        requestedPointVente: updateDataRaw.requestedPointVente,
+        fournisseur: updateDataRaw.fournisseur,
+        depotCentral: updateDataRaw.depotCentral,
+        statut: updateDataRaw.statut,
+        numero: updateDataRaw.numero, // si jamais vous autorisez l’édition
+      });
+      const preview = Object.assign(
+        Object.assign({}, existing.toObject()),
+        updateData,
+      );
+      resolveRouting(preview);
       const commande = yield model_1.Commande.findByIdAndUpdate(
         id,
-        updateData,
-        {
-          new: true,
-        },
+        { $set: updateData },
+        { new: true },
       );
       if (!commande) {
         res.status(404).json({ message: "Commande non trouvée." });
         return;
       }
-      // 2. Mise à jour des produits, si fournis
       if (Array.isArray(produitsUpdates) && produitsUpdates.length > 0) {
-        // On boucle sur les produits mis à jour
         for (const prodUpdate of produitsUpdates) {
-          const {
-              _id: produitId,
-              statut,
-              quantite,
-              mouvementStockId,
-            } = prodUpdate,
-            rest = __rest(prodUpdate, [
-              "_id",
-              "statut",
-              "quantite",
-              "mouvementStockId",
-            ]);
-          if (!produitId) {
-            // On ignore ou on peut gérer erreur
-            continue;
-          }
-          // Récupération du produit commande à mettre à jour
+          const _d = prodUpdate || {},
+            { _id: produitId, statut, quantite } = _d,
+            rest = __rest(_d, ["_id", "statut", "quantite"]);
+          if (!produitId) continue;
           const produitCommande =
             yield model_1.CommandeProduit.findById(produitId);
-          if (!produitCommande) {
-            // Ignore ou collecter erreurs
-            continue;
+          if (!produitCommande) continue;
+          // Mises à jour partielles sur l'item
+          for (const [k, v] of Object.entries(rest)) {
+            produitCommande[k] = v;
           }
-          // Mise à jour des propriétés générales sauf statut (car trigger)
-          for (const key in rest) {
-            // @ts-ignore
-            produitCommande[key] = rest[key];
+          if (typeof quantite === "number" && quantite > 0) {
+            produitCommande.quantite = quantite;
           }
-          // Gestion spéciale du statut
+          // Passage en "livré" => MouvementStock
           if (statut && statut !== produitCommande.statut) {
-            // Si passage au statut livré, on déclenche la création de mouvement stock
             if (statut === "livré") {
-              // Si déjà livré, on skip
-              if (produitCommande.statut === "livré") {
-                // rien à faire
-              } else {
-                // Créer le mouvement stock lié
+              if (produitCommande.statut !== "livré") {
                 const mouvementData = {
                   produit: produitCommande.produit,
                   quantite:
-                    quantite !== null && quantite !== void 0
+                    typeof quantite === "number" && quantite > 0
                       ? quantite
                       : produitCommande.quantite,
                   montant:
                     (_a = prodUpdate.montant) !== null && _a !== void 0
                       ? _a
-                      : 0, // idéalement passé dans prodUpdate
+                      : 0,
                   type: "Livraison",
                   statut: true,
-                  user: updateData.user, // À adapter selon contexte
+                  user:
+                    (_b = updateData.user) !== null && _b !== void 0
+                      ? _b
+                      : existing.user, // fallback
                   commandeId: commande._id,
-                  depotCentral: updateData.depotCentral || false,
+                  depotCentral: !!(preview.depotCentral || false),
                 };
-                if (updateData.pointVente) {
-                  mouvementData.pointVente = updateData.pointVente;
-                }
-                if (updateData.region) {
-                  mouvementData.region = updateData.region;
-                }
+                if (preview.pointVente)
+                  mouvementData.pointVente = preview.pointVente;
+                if (preview.region) mouvementData.region = preview.region;
                 const mouvement = new model_1.MouvementStock(mouvementData);
                 yield mouvement.save();
                 produitCommande.mouvementStockId = mouvement._id;
                 produitCommande.statut = "livré";
               }
             } else {
-              // Si changement de statut autre que livré, on applique direct
               produitCommande.statut = statut;
             }
           }
           yield produitCommande.save();
         }
       }
-      // 3. Recharger tous les produits pour vérifier si tous sont livrés
       const produitsCommande = yield model_1.CommandeProduit.find({
-        commande: commande._id,
+        commandeId: commande._id,
       });
-      const tousLivrés = produitsCommande.every((p) => p.statut === "livré");
-      if (tousLivrés && commande.statut !== "livrée") {
+      const tousLivres =
+        produitsCommande.length > 0 &&
+        produitsCommande.every((p) => p.statut === "livré");
+      if (tousLivres && commande.statut !== "livrée") {
         commande.statut = "livrée";
         yield commande.save();
       }
-      // 4. Retourner la commande peuplée
       const populated = yield model_1.Commande.findById(commande._id)
-        .populate("user", "-password")
-        .populate("region")
-        .populate({
-          path: "pointVente",
-          populate: { path: "region", model: "Region" },
-        })
-        .populate({
-          path: "produits",
-          populate: { path: "produit" },
-        });
+        .populate(commonPopulate)
+        .populate({ path: "produits", populate: { path: "produit" } });
       res.status(200).json(populated);
-      return;
     } catch (error) {
-      res.status(400).json({
+      const status =
+        (error === null || error === void 0 ? void 0 : error.status) || 400;
+      res.status(status).json({
         message: "Erreur lors de la mise à jour de la commande.",
         error: error.message,
       });
     }
   });
 exports.updateCommande = updateCommande;
-/**
- * DELETE /commandes/:id
- */
 const deleteCommande = (req, res) =>
   __awaiter(void 0, void 0, void 0, function* () {
     try {
       const { id } = req.params;
       const deleted = yield model_1.Commande.findByIdAndDelete(id);
-      if (!deleted) res.status(404).json({ message: "Commande non trouvée." });
+      if (!deleted) {
+        res.status(404).json({ message: "Commande non trouvée." });
+        return;
+      }
       res.status(200).json({ message: "Commande supprimée avec succès." });
     } catch (error) {
       res.status(400).json({
         message: "Erreur lors de la suppression.",
         error: error.message,
       });
-      return;
     }
   });
 exports.deleteCommande = deleteCommande;
-// src/controllers/commande.controller.ts (suite)
 const printCommande = (req, res) =>
   __awaiter(void 0, void 0, void 0, function* () {
     var _a;
@@ -575,21 +799,12 @@ const printCommande = (req, res) =>
       const { id } = req.params;
       const format = req.query.format || "pos80";
       const commande = yield model_1.Commande.findById(id)
-        .populate("user", "-password")
-        .populate("region")
-        .populate({
-          path: "pointVente",
-          populate: { path: "region", model: "Region" },
-        })
-        .populate({
-          path: "produits",
-          populate: { path: "produit" },
-        });
+        .populate(commonPopulate)
+        .populate({ path: "produits", populate: { path: "produit" } });
       if (!commande) {
         res.status(404).json({ message: "Commande introuvable" });
         return;
       }
-      // Optionnel: fournir l'organisation via query, sinon prends celle par défaut côté serveur
       const organisation =
         ((_a = req.body) === null || _a === void 0
           ? void 0

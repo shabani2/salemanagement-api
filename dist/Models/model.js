@@ -493,11 +493,23 @@ exports.CommandeSchema = new mongoose_1.Schema(
       ref: "User",
       required: true,
     },
+    fournisseur: {
+      type: mongoose_1.default.Schema.Types.ObjectId,
+      ref: "User",
+    },
     region: {
       type: mongoose_1.default.Schema.Types.ObjectId,
       ref: "Region",
     },
     pointVente: {
+      type: mongoose_1.default.Schema.Types.ObjectId,
+      ref: "PointVente",
+    },
+    requestedRegion: {
+      type: mongoose_1.default.Schema.Types.ObjectId,
+      ref: "Region",
+    },
+    requestedPointVente: {
       type: mongoose_1.default.Schema.Types.ObjectId,
       ref: "PointVente",
     },

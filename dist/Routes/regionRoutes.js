@@ -22,6 +22,7 @@ router.get(
   (0, authorize_1.authorize)(["SuperAdmin", "AdminRegion"]),
   regionController_1.searchRegions,
 );
+router.get("/:id", auth_1.authenticate, regionController_1.getRegionById);
 router.post(
   "/",
   auth_1.authenticate,

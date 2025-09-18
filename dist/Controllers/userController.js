@@ -42,18 +42,6 @@ exports.updateUser =
 const mongoose_1 = require("mongoose");
 const model_1 = require("../Models/model");
 const uploadService_1 = require("../services/uploadService");
-/**
- * GET /user
- * Query:
- *  - page, limit
- *  - q (recherche: nom/prenom/email/téléphone/role/region/pointVente)
- *  - role (filtre exact)
- *  - region (ObjectId string) → match user.region OU pointVente.region
- *  - pointVente (ObjectId string)
- *  - sortBy: createdAt | updatedAt | nom | prenom | email | telephone | role | region.nom | pointVente.nom
- *  - order: asc | desc
- *  - includeTotal: 'true' | 'false'
- */
 const getAllUsers = (req, res) =>
   __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b, _c, _d, _e, _f, _g, _h, _j;
@@ -85,7 +73,7 @@ const getAllUsers = (req, res) =>
             : sortBy;
       const basePipeline = [
         ...(role ? [{ $match: { role } }] : []),
-        // region directe de l'utilisateur
+        // region directe
         {
           $lookup: {
             from: "regions",
@@ -95,7 +83,7 @@ const getAllUsers = (req, res) =>
           },
         },
         { $unwind: { path: "$region", preserveNullAndEmptyArrays: true } },
-        // point de vente + sa région
+        // pointVente
         {
           $lookup: {
             from: "pointventes",
@@ -105,30 +93,74 @@ const getAllUsers = (req, res) =>
           },
         },
         { $unwind: { path: "$pointVente", preserveNullAndEmptyArrays: true } },
+        // --- FIX ROBUSTE: convertir l'ID de région du PV si string → ObjectId
+        {
+          $addFields: {
+            pvRegionId: {
+              $switch: {
+                branches: [
+                  {
+                    case: {
+                      $eq: [{ $type: "$pointVente.region" }, "objectId"],
+                    },
+                    then: "$pointVente.region",
+                  },
+                  {
+                    case: {
+                      $and: [
+                        { $eq: [{ $type: "$pointVente.region" }, "string"] },
+                        { $eq: [{ $strLenCP: "$pointVente.region" }, 24] },
+                      ],
+                    },
+                    then: { $toObjectId: "$pointVente.region" },
+                  },
+                ],
+                default: null,
+              },
+            },
+          },
+        },
+        // région du pointVente (lookup standard sur pvRegionId)
         {
           $lookup: {
             from: "regions",
-            localField: "pointVente.region",
+            localField: "pvRegionId",
             foreignField: "_id",
             as: "pvRegion",
           },
         },
         { $unwind: { path: "$pvRegion", preserveNullAndEmptyArrays: true } },
-        // champs calculés utiles (tri/recherche)
+        // Injecter la région peuplée dans pointVente.region
         {
           $addFields: {
-            regionNom: { $ifNull: ["$region.nom", "$pvRegion.nom"] },
+            pointVente: {
+              $cond: [
+                { $ifNull: ["$pointVente._id", false] },
+                { $mergeObjects: ["$pointVente", { region: "$pvRegion" }] },
+                "$pointVente",
+              ],
+            },
+          },
+        },
+        // libellés pour tri/recherche
+        {
+          $addFields: {
+            regionNom: { $ifNull: ["$region.nom", "$pointVente.region.nom"] },
             pointVenteNom: "$pointVente.nom",
           },
         },
-        // filtres région / pointVente
+        // filtres
         ...(regionId && mongoose_1.Types.ObjectId.isValid(regionId)
           ? [
               {
                 $match: {
                   $or: [
                     { "region._id": new mongoose_1.Types.ObjectId(regionId) },
-                    { "pvRegion._id": new mongoose_1.Types.ObjectId(regionId) },
+                    {
+                      "pointVente.region._id": new mongoose_1.Types.ObjectId(
+                        regionId,
+                      ),
+                    },
                   ],
                 },
               },
@@ -171,12 +203,15 @@ const getAllUsers = (req, res) =>
             adresse: 1,
             role: 1,
             image: 1,
-            region: 1,
-            pointVente: 1,
-            regionNom: 1,
-            pointVenteNom: 1,
             createdAt: 1,
             updatedAt: 1,
+            region: 1, // doc region (si défini)
+            pointVente: 1, // doc pointVente + region peuplée
+            regionNom: 1,
+            pointVenteNom: 1,
+            // Nettoyage interne
+            pvRegionId: 0,
+            pvRegion: 0,
           },
         },
         { $sort: { [sortField]: order } },
@@ -199,7 +234,7 @@ const getAllUsers = (req, res) =>
             },
           },
         ];
-        const agg = yield model_1.User.aggregate(pipeline);
+        const agg = yield model_1.User.aggregate(pipeline).allowDiskUse(true);
         const data =
           (_g =
             (_f = agg === null || agg === void 0 ? void 0 : agg[0]) === null ||
@@ -228,36 +263,30 @@ const getAllUsers = (req, res) =>
             hasNext: page < totalPages,
           },
         });
-      } else {
-        const data = yield model_1.User.aggregate([
-          ...basePipeline,
-          { $skip: (page - 1) * limit },
-          { $limit: limit },
-        ]);
-        res.json({
-          data,
-          meta: {
-            page,
-            limit,
-            total: data.length,
-            totalPages: 1,
-            hasPrev: false,
-            hasNext: false,
-          },
-        });
       }
+      const data = yield model_1.User.aggregate([
+        ...basePipeline,
+        { $skip: (page - 1) * limit },
+        { $limit: limit },
+      ]).allowDiskUse(true);
+      res.json({
+        data,
+        meta: {
+          page,
+          limit,
+          total: data.length,
+          totalPages: 1,
+          hasPrev: false,
+          hasNext: false,
+        },
+      });
     } catch (err) {
       console.error("Erreur dans getAllUsers:", err);
       res.status(500).json({ message: "Erreur interne", error: err });
     }
   });
 exports.getAllUsers = getAllUsers;
-/**
- * GET /user/region/:regionId?   (AdminRegion)
- * - si :regionId présent, on filtre dessus
- * - sinon on utilise req.user.region (Auth)
- * Supporte les mêmes query: page/limit/q/role/sortBy/order/includeTotal
- */
+// --- le reste de ton contrôleur inchangé ---
 const getUsersByRegion = (req, res) =>
   __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b;
@@ -273,7 +302,6 @@ const getUsersByRegion = (req, res) =>
       if (!regionId || !mongoose_1.Types.ObjectId.isValid(regionId)) {
         res.status(400).json({ message: "regionId invalide" });
       }
-      // On réutilise getAllUsers en injectant region dans req.query
       req.query.region = regionId;
       (0, exports.getAllUsers)(req, res);
     } catch (err) {
@@ -281,30 +309,21 @@ const getUsersByRegion = (req, res) =>
     }
   });
 exports.getUsersByRegion = getUsersByRegion;
-/**
- * GET /user/pointvente/:pointVenteId  (AdminPointVente)
- * Supporte les mêmes query: page/limit/q/role/sortBy/order/includeTotal
- */
 const getUsersByPointVente = (req, res) =>
   __awaiter(void 0, void 0, void 0, function* () {
     try {
       const { pointVenteId } = req.params;
       if (!pointVenteId || !mongoose_1.Types.ObjectId.isValid(pointVenteId)) {
         res.status(400).json({ message: "ID du point de vente invalide" });
-        return;
       }
       req.query.pointVente = pointVenteId;
       (0, exports.getAllUsers)(req, res);
     } catch (err) {
       console.error("Erreur dans getUsersByPointVente:", err);
       res.status(500).json({ message: "Erreur interne", error: err });
-      return;
     }
   });
 exports.getUsersByPointVente = getUsersByPointVente;
-/**
- * DELETE /user/:userId
- */
 const deleteUser = (req, res) =>
   __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -314,7 +333,6 @@ const deleteUser = (req, res) =>
         res.status(404).json({ message: "Utilisateur non trouvé" });
         return;
       }
-      // règles d'autorisations (ajuste si besoin)
       if (
         req.user.role === "SuperAdmin" ||
         (req.user.role === "AdminRegion" &&
@@ -327,18 +345,11 @@ const deleteUser = (req, res) =>
         return;
       }
       res.status(403).json({ message: "Accès refusé" });
-      return;
     } catch (err) {
       res.status(500).json({ message: "Erreur interne", error: err });
-      return;
     }
   });
 exports.deleteUser = deleteUser;
-/**
- * PUT /user
- * (multipart/form-data) — met à jour le profil (image optionnelle)
- * inchangé, sauf robustesse sur l’upload
- */
 const updateUser = (req, res) =>
   __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -365,7 +376,6 @@ const updateUser = (req, res) =>
       if (role) updateFields.role = role;
       if (pointVente) updateFields.pointVente = pointVente;
       if (region) updateFields.region = region;
-      // Image
       if (req.file) {
         try {
           const imagePath = yield (0, uploadService_1.uploadFile)(
@@ -373,12 +383,11 @@ const updateUser = (req, res) =>
             role || user.role,
           );
           updateFields.image = imagePath;
-        } catch (uploadError) {
+        } catch (_a) {
           res.status(500).json({ message: "Échec de l'upload de l'image" });
           return;
         }
       }
-      // téléphone/email (unicité si changement)
       if (telephone && telephone !== user.telephone) {
         const existingUser = yield model_1.User.findOne({
           $or: [{ telephone }, { email: telephone }],

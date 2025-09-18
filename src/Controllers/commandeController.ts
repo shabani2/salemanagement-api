@@ -3,7 +3,12 @@
 
 import { Request, Response } from "express";
 import mongoose from "mongoose";
-import { Commande, CommandeProduit, MouvementStock } from "../Models/model";
+import {
+  Commande,
+  CommandeProduit,
+  MouvementStock,
+  PointVente,
+} from "../Models/model";
 import { renderCommandePdf } from "./generateCommandePdf";
 
 /**
@@ -84,6 +89,16 @@ const commonPopulate = [
     populate: { path: "region", model: "Region" },
   },
 ];
+export function pickDefined<T extends object>(obj: T): Partial<T> {
+  const out: Partial<T> = {};
+  for (const k of Object.keys(obj) as (keyof T)[]) {
+    const v = obj[k];
+    if (v !== undefined) {
+      out[k] = v as T[keyof T];
+    }
+  }
+  return out;
+}
 
 // ---------------------------------------------------------
 // Routing rules
@@ -224,9 +239,16 @@ const formatCommande = async (commande: any) => {
   };
 };
 
-// ---------------------------------------------------------
-// Handlers
-// ---------------------------------------------------------
+// Helper: tri par défaut (pour voir les plus récentes en premier)
+const applySort = (req: Request) => {
+  const sortBy = (req.query.sortBy as string) || "createdAt";
+  const order = (req.query.order as string) === "asc" ? 1 : -1;
+  // pourquoi: _id comme tie-breaker pour stabilité
+  return sortBy === "createdAt"
+    ? { createdAt: order, _id: order }
+    : { [sortBy]: order, _id: -1 };
+};
+
 export const getAllCommandes = async (
   req: Request,
   res: Response,
@@ -235,13 +257,17 @@ export const getAllCommandes = async (
     const { skip, limit } = getPaginationOptions(req);
     const filters = buildCommandeFilters(req);
 
-    const commandes = await (Commande as any)
-      .find(filters)
-      .skip(skip)
-      .limit(limit)
-      .populate(commonPopulate as any);
+    const sort = applySort(req);
+    const [commandes, total] = await Promise.all([
+      (Commande as any)
+        .find(filters)
+        .sort(sort)
+        .skip(skip)
+        .limit(limit)
+        .populate(commonPopulate as any),
+      Commande.countDocuments(filters),
+    ]);
 
-    const total = await Commande.countDocuments(filters);
     const formatted = await Promise.all(commandes.map(formatCommande));
     res.status(200).json({ total, commandes: formatted });
   } catch (error) {
@@ -261,14 +287,18 @@ export const getCommandesByUser = async (
   try {
     const { userId } = req.params;
     const { skip, limit } = getPaginationOptions(req);
+    const sort = applySort(req);
 
-    const commandes = await (Commande as any)
-      .find({ user: userId })
-      .skip(skip)
-      .limit(limit)
-      .populate(commonPopulate as any);
+    const [commandes, total] = await Promise.all([
+      (Commande as any)
+        .find({ user: userId })
+        .sort(sort)
+        .skip(skip)
+        .limit(limit)
+        .populate(commonPopulate as any),
+      Commande.countDocuments({ user: userId }),
+    ]);
 
-    const total = await Commande.countDocuments({ user: userId });
     const formatted = await Promise.all(commandes.map(formatCommande));
     res.status(200).json({ total, commandes: formatted });
   } catch (error) {
@@ -281,6 +311,33 @@ export const getCommandesByUser = async (
   }
 };
 
+// /src/controllers/commandeController.ts  (extraits à remplacer)
+
+// -------------------------- Helpers de portée --------------------------
+const buildQueryForPointVente = (pointVenteId: string) => ({
+  $or: [
+    { pointVente: pointVenteId }, // destinataire = ce PV
+    { requestedPointVente: pointVenteId }, // source = ce PV
+  ],
+});
+
+const buildQueryForRegion = async (regionId: string) => {
+  // IDs des PV rattachés à cette région
+  const pvIds: mongoose.Types.ObjectId[] = await (PointVente as any)
+    .find({ region: regionId })
+    .distinct("_id");
+
+  return {
+    $or: [
+      { region: regionId }, // destinataire = la région
+      { requestedRegion: regionId }, // source = la région
+      { pointVente: { $in: pvIds } }, // destinataire = PV de la région
+      { requestedPointVente: { $in: pvIds } }, // source = PV de la région
+    ],
+  };
+};
+
+// -------------------------- Handlers mis à jour --------------------------
 export const getCommandesByPointVente = async (
   req: Request,
   res: Response,
@@ -288,24 +345,40 @@ export const getCommandesByPointVente = async (
   try {
     const { pointVenteId } = req.params;
     const { skip, limit } = getPaginationOptions(req);
+    const sort = applySort(req);
 
-    const commandes = await (Commande as any)
-      .find({ pointVente: pointVenteId })
-      .skip(skip)
-      .limit(limit)
-      .populate(commonPopulate as any);
+    if (!isValidObjectId(pointVenteId)) {
+      res.status(400).json({ message: "Paramètre pointVenteId invalide." });
+      return;
+    }
 
-    const total = await Commande.countDocuments({ pointVente: pointVenteId });
+    const query = buildQueryForPointVente(pointVenteId);
+
+    const [commandes, total] = await Promise.all([
+      (Commande as any)
+        .find(query)
+        .sort(sort)
+        .skip(skip)
+        .limit(limit)
+        .populate(commonPopulate as any),
+      Commande.countDocuments(query),
+    ]);
+
     const formatted = await Promise.all(commandes.map(formatCommande));
-    res.status(200).json({ total, commandes: formatted });
-  } catch (error) {
     res
-      .status(400)
+      .status(200)
       .json({
-        message:
-          "Erreur lors de la récupération des commandes par point de vente.",
-        error: (error as Error).message,
+        total,
+        commandes: formatted,
+        page: Math.floor(skip / limit) + 1,
+        limit,
       });
+  } catch (error) {
+    res.status(400).json({
+      message:
+        "Erreur lors de la récupération des commandes par point de vente (source ou destination).",
+      error: (error as Error).message,
+    });
   }
 };
 
@@ -316,44 +389,40 @@ export const getCommandesByRegion = async (
   try {
     const { regionId } = req.params;
     const { skip, limit } = getPaginationOptions(req);
+    const sort = applySort(req);
 
-    const commandes = await (Commande as any)
-      .find({
-        $or: [
-          { region: regionId },
-          { requestedRegion: regionId },
-          { pointVente: { $ne: null } },
-          { requestedPointVente: { $ne: null } },
-        ],
-      })
-      .skip(skip)
-      .limit(limit)
-      .populate(commonPopulate as any);
+    if (!isValidObjectId(regionId)) {
+      res.status(400).json({ message: "Paramètre regionId invalide." });
+      return;
+    }
 
-    const filtered = (commandes as any[]).filter((cmd: any) => {
-      const destRegionId = cmd.region?._id?.toString();
-      const srcRegionId = cmd.requestedRegion?._id?.toString();
-      const destPVRegionId = (cmd.pointVente as any)?.region?._id?.toString();
-      const srcPVRegionId = (
-        cmd.requestedPointVente as any
-      )?.region?._id?.toString();
-      return (
-        destRegionId === regionId ||
-        srcRegionId === regionId ||
-        destPVRegionId === regionId ||
-        srcPVRegionId === regionId
-      );
-    });
+    const query = await buildQueryForRegion(regionId);
 
-    const formatted = await Promise.all(filtered.map(formatCommande));
-    res.status(200).json({ total: filtered.length, commandes: formatted });
-  } catch (error) {
+    const [commandes, total] = await Promise.all([
+      (Commande as any)
+        .find(query)
+        .sort(sort)
+        .skip(skip)
+        .limit(limit)
+        .populate(commonPopulate as any),
+      Commande.countDocuments(query),
+    ]);
+
+    const formatted = await Promise.all(commandes.map(formatCommande));
     res
-      .status(400)
+      .status(200)
       .json({
-        message: "Erreur lors de la récupération des commandes par région.",
-        error: (error as Error).message,
+        total,
+        commandes: formatted,
+        page: Math.floor(skip / limit) + 1,
+        limit,
       });
+  } catch (error) {
+    res.status(400).json({
+      message:
+        "Erreur lors de la récupération des commandes par région (source ou destination).",
+      error: (error as Error).message,
+    });
   }
 };
 
@@ -364,16 +433,18 @@ export const getCommandesByRequestedRegion = async (
   try {
     const { requestedRegionId } = req.params as any;
     const { skip, limit } = getPaginationOptions(req);
+    const sort = applySort(req);
 
-    const commandes = await (Commande as any)
-      .find({ requestedRegion: requestedRegionId })
-      .skip(skip)
-      .limit(limit)
-      .populate(commonPopulate as any);
+    const [commandes, total] = await Promise.all([
+      (Commande as any)
+        .find({ requestedRegion: requestedRegionId })
+        .sort(sort)
+        .skip(skip)
+        .limit(limit)
+        .populate(commonPopulate as any),
+      Commande.countDocuments({ requestedRegion: requestedRegionId }),
+    ]);
 
-    const total = await Commande.countDocuments({
-      requestedRegion: requestedRegionId,
-    });
     const formatted = await Promise.all(commandes.map(formatCommande));
     res.status(200).json({ total, commandes: formatted });
   } catch (error) {
@@ -394,16 +465,18 @@ export const getCommandesByRequestedPointVente = async (
   try {
     const { requestedPointVenteId } = req.params as any;
     const { skip, limit } = getPaginationOptions(req);
+    const sort = applySort(req);
 
-    const commandes = await (Commande as any)
-      .find({ requestedPointVente: requestedPointVenteId })
-      .skip(skip)
-      .limit(limit)
-      .populate(commonPopulate as any);
+    const [commandes, total] = await Promise.all([
+      (Commande as any)
+        .find({ requestedPointVente: requestedPointVenteId })
+        .sort(sort)
+        .skip(skip)
+        .limit(limit)
+        .populate(commonPopulate as any),
+      Commande.countDocuments({ requestedPointVente: requestedPointVenteId }),
+    ]);
 
-    const total = await Commande.countDocuments({
-      requestedPointVente: requestedPointVenteId,
-    });
     const formatted = await Promise.all(commandes.map(formatCommande));
     res.status(200).json({ total, commandes: formatted });
   } catch (error) {
@@ -424,14 +497,18 @@ export const getCommandesByFournisseur = async (
   try {
     const { fournisseurId } = req.params as any;
     const { skip, limit } = getPaginationOptions(req);
+    const sort = applySort(req);
 
-    const commandes = await (Commande as any)
-      .find({ fournisseur: fournisseurId })
-      .skip(skip)
-      .limit(limit)
-      .populate(commonPopulate as any);
+    const [commandes, total] = await Promise.all([
+      (Commande as any)
+        .find({ fournisseur: fournisseurId })
+        .sort(sort)
+        .skip(skip)
+        .limit(limit)
+        .populate(commonPopulate as any),
+      Commande.countDocuments({ fournisseur: fournisseurId }),
+    ]);
 
-    const total = await Commande.countDocuments({ fournisseur: fournisseurId });
     const formatted = await Promise.all(commandes.map(formatCommande));
     res.status(200).json({ total, commandes: formatted });
   } catch (error) {
@@ -443,6 +520,10 @@ export const getCommandesByFournisseur = async (
       });
   }
 };
+
+// ---------------------------------------------------------
+// Handlers
+// ---------------------------------------------------------
 
 export const getCommandeById = async (
   req: Request,
@@ -463,13 +544,46 @@ export const getCommandeById = async (
     const formatted = await formatCommande(commande);
     res.status(200).json(formatted);
   } catch (error) {
+    res.status(400).json({
+      message: "Erreur lors de la récupération de la commande.",
+      error: (error as Error).message,
+    });
+  }
+};
+
+// const pickDefined = <T extends Record<string, any>>(obj: T): Partial<T> =>
+//   Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined));
+
+const isValidProductItem = (it: any) =>
+  it &&
+  it.produit &&
+  mongoose.Types.ObjectId.isValid(String(it.produit)) &&
+  Number(it.quantite) > 0;
+
+const assertProduitsOr400 = (
+  req: Request,
+  res: Response,
+): { ok: true } | { ok: false } => {
+  const produits = req.body?.produits;
+  if (!Array.isArray(produits) || produits.length === 0) {
     res
       .status(400)
       .json({
-        message: "Erreur lors de la récupération de la commande.",
-        error: (error as Error).message,
+        message:
+          "Les produits sont requis et doivent être un tableau non vide.",
       });
+    return { ok: false };
   }
+  if (!produits.every(isValidProductItem)) {
+    res
+      .status(400)
+      .json({
+        message:
+          "Chaque produit doit contenir { produit:ObjectId, quantite>0 }.",
+      });
+    return { ok: false };
+  }
+  return { ok: true };
 };
 
 export const createCommande = async (
@@ -492,17 +606,18 @@ export const createCommande = async (
 
     const wantPdf = req.query.pdf === "1" || print === true;
 
-    if (!user || !Array.isArray(produits) || produits.length === 0) {
-      res
-        .status(400)
-        .json({ message: "L'utilisateur et les produits sont requis." });
+    if (!user) {
+      res.status(400).json({ message: "Le champ 'user' est requis." });
       return;
     }
+    const pv = assertProduitsOr400(req, res);
+    if (!pv.ok) return;
 
+    // Peut muter req.body (routage dérivé selon votre logique)
     resolveRouting(req.body);
 
     const numero = `CMD-${Date.now()}`;
-    const commande = new (Commande as any)({
+    const toCreate = pickDefined({
       numero,
       user,
       region,
@@ -511,13 +626,15 @@ export const createCommande = async (
       requestedPointVente,
       depotCentral: !!depotCentral,
       fournisseur,
-      produits: [],
-      statut: "attente",
+      produits: [] as mongoose.Types.ObjectId[],
+      statut: "attente" as const,
     });
+
+    const commande = new (Commande as any)(toCreate);
     await commande.save();
 
     const createdCommandeProduits = await Promise.all(
-      produits.map(async (prod: any) => {
+      (produits as any[]).map(async (prod: any) => {
         const created = new (CommandeProduit as any)({
           commandeId: commande._id,
           produit: prod.produit,
@@ -553,12 +670,10 @@ export const createCommande = async (
     res.status(201).json(populated);
   } catch (error) {
     const status = (error as any)?.status || 400;
-    res
-      .status(status)
-      .json({
-        message: "Erreur lors de la création de la commande.",
-        error: (error as Error).message,
-      });
+    res.status(status).json({
+      message: "Erreur lors de la création de la commande.",
+      error: (error as Error).message,
+    });
   }
 };
 
@@ -568,7 +683,7 @@ export const updateCommande = async (
 ): Promise<void> => {
   try {
     const { id } = req.params;
-    const { produits: produitsUpdates, ...updateData } = req.body;
+    const { produits: produitsUpdates, ...updateDataRaw } = req.body;
 
     const existing = await (Commande as any).findById(id);
     if (!existing) {
@@ -576,12 +691,27 @@ export const updateCommande = async (
       return;
     }
 
+    // On ne force aucun champ optionnel: on applique seulement les clés définies
+    const updateData = pickDefined({
+      user: updateDataRaw.user,
+      region: updateDataRaw.region,
+      pointVente: updateDataRaw.pointVente,
+      requestedRegion: updateDataRaw.requestedRegion,
+      requestedPointVente: updateDataRaw.requestedPointVente,
+      fournisseur: updateDataRaw.fournisseur,
+      depotCentral: updateDataRaw.depotCentral,
+      statut: updateDataRaw.statut,
+      numero: updateDataRaw.numero, // si jamais vous autorisez l’édition
+    });
+
     const preview = { ...existing.toObject(), ...updateData };
     resolveRouting(preview);
 
-    const commande = await (Commande as any).findByIdAndUpdate(id, updateData, {
-      new: true,
-    });
+    const commande = await (Commande as any).findByIdAndUpdate(
+      id,
+      { $set: updateData },
+      { new: true },
+    );
     if (!commande) {
       res.status(404).json({ message: "Commande non trouvée." });
       return;
@@ -589,7 +719,7 @@ export const updateCommande = async (
 
     if (Array.isArray(produitsUpdates) && produitsUpdates.length > 0) {
       for (const prodUpdate of produitsUpdates) {
-        const { _id: produitId, statut, quantite, ...rest } = prodUpdate;
+        const { _id: produitId, statut, quantite, ...rest } = prodUpdate || {};
         if (!produitId) continue;
 
         const produitCommande = await (CommandeProduit as any).findById(
@@ -597,22 +727,30 @@ export const updateCommande = async (
         );
         if (!produitCommande) continue;
 
-        for (const key of Object.keys(rest)) {
-          (produitCommande as any)[key] = (rest as any)[key];
+        // Mises à jour partielles sur l'item
+        for (const [k, v] of Object.entries(rest)) {
+          (produitCommande as any)[k] = v;
+        }
+        if (typeof quantite === "number" && quantite > 0) {
+          produitCommande.quantite = quantite;
         }
 
+        // Passage en "livré" => MouvementStock
         if (statut && statut !== produitCommande.statut) {
           if (statut === "livré") {
             if (produitCommande.statut !== "livré") {
               const mouvementData: any = {
                 produit: produitCommande.produit,
-                quantite: quantite ?? produitCommande.quantite,
+                quantite:
+                  typeof quantite === "number" && quantite > 0
+                    ? quantite
+                    : produitCommande.quantite,
                 montant: prodUpdate.montant ?? 0,
                 type: "Livraison",
                 statut: true,
-                user: updateData.user,
+                user: updateData.user ?? existing.user, // fallback
                 commandeId: commande._id,
-                depotCentral: preview.depotCentral || false,
+                depotCentral: !!(preview.depotCentral || false),
               };
               if (preview.pointVente)
                 mouvementData.pointVente = preview.pointVente;
@@ -653,12 +791,10 @@ export const updateCommande = async (
     res.status(200).json(populated);
   } catch (error) {
     const status = (error as any)?.status || 400;
-    res
-      .status(status)
-      .json({
-        message: "Erreur lors de la mise à jour de la commande.",
-        error: (error as Error).message,
-      });
+    res.status(status).json({
+      message: "Erreur lors de la mise à jour de la commande.",
+      error: (error as Error).message,
+    });
   }
 };
 
@@ -675,12 +811,10 @@ export const deleteCommande = async (
     }
     res.status(200).json({ message: "Commande supprimée avec succès." });
   } catch (error) {
-    res
-      .status(400)
-      .json({
-        message: "Erreur lors de la suppression.",
-        error: (error as Error).message,
-      });
+    res.status(400).json({
+      message: "Erreur lors de la suppression.",
+      error: (error as Error).message,
+    });
   }
 };
 
@@ -705,11 +839,9 @@ export const printCommande = async (
     const organisation = req.body?.organisation || null;
     await renderCommandePdf(res, commande, { organisation, format });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        message: "Erreur lors de l'impression du bon de commande.",
-        error: (error as Error).message,
-      });
+    res.status(500).json({
+      message: "Erreur lors de l'impression du bon de commande.",
+      error: (error as Error).message,
+    });
   }
 };
