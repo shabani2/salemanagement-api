@@ -3,9 +3,8 @@ import mongoose from "mongoose";
 import { Stock } from "../Models/model";
 
 // -----------------
-// Types & Helpers fournis
+// Types & Helpers
 // -----------------
-
 type OID = mongoose.Types.ObjectId;
 
 export interface AdjustStockFilter {
@@ -15,7 +14,12 @@ export interface AdjustStockFilter {
   depotCentral?: boolean;
 }
 
-// --- FIX: empêcher les stocks négatifs en décrément ---
+type LivraisonOverride = {
+  source?: AdjustStockFilter;
+  destination?: AdjustStockFilter;
+};
+
+// --- Empêcher les stocks négatifs en décrément ---
 export const adjustStock = async (
   filter: AdjustStockFilter,
   qtyChange: number,
@@ -47,7 +51,7 @@ export const adjustStock = async (
   ).exec();
 };
 
-// Détermine la source/destination d’une livraison selon les règles
+// Détermine la source/destination d’une livraison (fallback si pas d’override)
 export function computeLivraisonScopes(doc: any): {
   source?: AdjustStockFilter;
   destination?: AdjustStockFilter;
@@ -60,7 +64,7 @@ export function computeLivraisonScopes(doc: any): {
     pointVente?: OID;
   };
 
-  // (1) Cas prioritaire demandé: région -> point de vente
+  // Cas standard historique: REGION -> PV
   if (region && pointVente) {
     return {
       source: { produit, region },
@@ -68,7 +72,7 @@ export function computeLivraisonScopes(doc: any): {
     };
   }
 
-  // (2) depotCentral=true => source = central; destination = region || pointVente (si fourni)
+  // CENTRAL -> (REGION | PV)
   if (depotCentral === true) {
     return {
       source: { produit, depotCentral: true },
@@ -80,7 +84,7 @@ export function computeLivraisonScopes(doc: any): {
     };
   }
 
-  // (3) region seul => source = region; destination = (pointVente ?) sinon undefined
+  // REGION -> (PV ?)
   if (region) {
     return {
       source: { produit, region },
@@ -88,7 +92,7 @@ export function computeLivraisonScopes(doc: any): {
     };
   }
 
-  // (4) pointVente seul => destination=pointVente (utile pour crédit à l'update quand le doc n'a plus region)
+  // PV seul: destination = PV (utile en crédit différé)
   if (pointVente && !region && !depotCentral) {
     return { destination: { produit, pointVente } };
   }
@@ -122,48 +126,58 @@ export function computeOperationSource(doc: any): {
 }
 
 // -----------------
-// HOOKS fournis (avec corrections ciblées)
+// HOOKS (avec override _livraisonScopes)
 // -----------------
-
 export function attachMouvementHooks(MouvementStockSchema: mongoose.Schema) {
   // PRE SAVE
   MouvementStockSchema.pre("save", async function (next) {
     try {
       const { type, statut, quantite } = this as any;
 
-      // Entrée & Commande: pas de contrôle de dispo
+      // Entrée & Commande: pas de contrôle
       if (type === "Entrée" || type === "Commande") return next();
 
-      // LIVRAISON: vérifier le stock de la *source* uniquement
+      // LIVRAISON: vérifier la source (avec override si fourni)
       if (type === "Livraison") {
-        // Calcul à partir de l'état entrant
-        const { source, destination, reasonIfInvalid } =
-          computeLivraisonScopes(this);
-        if (!source)
-          return next(new Error(reasonIfInvalid || "Livraison invalide"));
+        const hint = (this as any)._livraisonScopes as
+          | LivraisonOverride
+          | undefined;
+        const computed = computeLivraisonScopes(this);
+        const chosen = {
+          source: hint?.source ?? computed.source,
+          destination: hint?.destination ?? computed.destination,
+          reasonIfInvalid:
+            hint?.source || hint?.destination
+              ? undefined
+              : computed.reasonIfInvalid,
+        };
 
-        const srcStock = await Stock.findOne(source).lean().exec();
+        if (!chosen.source) {
+          return next(
+            new Error(chosen.reasonIfInvalid || "Livraison invalide"),
+          );
+        }
+
+        const srcStock = await Stock.findOne(chosen.source).lean().exec();
         if (!srcStock || srcStock.quantite < quantite) {
           return next(new Error("Stock source insuffisant pour la livraison"));
         }
 
-        // *** FIX demandé ***
-        // Si on reçoit regionId + pointVenteId, on rattache le mouvement *au point de vente* :
-        // - on mémorise les portées pour post-save
-        // - on reset `region` pour que le doc sauvegardé appartienne au pointVente
-        const hadRegionAndPV = !!(
+        // Mémoriser pour post-save (why: garantir la même orientation)
+        (this as any)._livraisonScopes = chosen;
+
+        // Option traçabilité: rattacher au PV si region & PV présents
+        const hasRegionAndPV = !!(
           (this as any).region && (this as any).pointVente
         );
-        if (hadRegionAndPV) {
-          (this as any)._livraisonScopes = { source, destination };
+        if (hasRegionAndPV) {
           (this as any).set?.("region", undefined);
           (this as any).region = undefined;
         }
-
         return next();
       }
 
-      // VENTE / SORTIE: vérifier la source selon depotCentral/region/pointVente
+      // VENTE / SORTIE: vérifier la source quand statut=true
       if (["Vente", "Sortie"].includes(type)) {
         const { source, reasonIfInvalid } = computeOperationSource(this);
         if (!source)
@@ -190,7 +204,7 @@ export function attachMouvementHooks(MouvementStockSchema: mongoose.Schema) {
       const { produit, quantite, type, statut, montant, transferApplied } =
         doc as any;
 
-      // ENTRÉE: on crédite directement la destination (region sinon central)
+      // ENTRÉE: crédit direct
       if (type === "Entrée") {
         if ((doc as any).region)
           await adjustStock(
@@ -203,10 +217,10 @@ export function attachMouvementHooks(MouvementStockSchema: mongoose.Schema) {
         return;
       }
 
-      // Pour les autres, si statut falsy et type !== Livraison, on ne touche pas (comportement existant)
+      // Si statut falsy et pas Livraison, ne rien faire (comportement existant)
       if (!statut && type !== "Livraison") return;
 
-      // VENTE / SORTIE: décrémente la source quand statut=true
+      // VENTE / SORTIE
       if (["Vente", "Sortie"].includes(type)) {
         const { source, reasonIfInvalid } = computeOperationSource(doc);
         if (!source) return console.error(reasonIfInvalid);
@@ -214,24 +228,24 @@ export function attachMouvementHooks(MouvementStockSchema: mongoose.Schema) {
         return;
       }
 
-      // LIVRAISON:
+      // LIVRAISON
       if (type === "Livraison") {
-        // Utiliser les portées mémorisées si la région a été reset en pre-save
         const memo = (doc as any)._livraisonScopes as
-          | { source?: AdjustStockFilter; destination?: AdjustStockFilter }
+          | LivraisonOverride
           | undefined;
-        //@ts-ignore
-        const { source, destination, reasonIfInvalid } =
-          memo ?? computeLivraisonScopes(doc);
-        if (!source) return console.error(reasonIfInvalid);
+        const fallback = computeLivraisonScopes(doc);
+        const chosen = {
+          source: memo?.source ?? fallback.source,
+          destination: memo?.destination ?? fallback.destination,
+        };
+        if (!chosen.source) return console.error(fallback.reasonIfInvalid);
 
-        // 1) Toujours décrémenter la source immédiatement
-        await adjustStock(source, -quantite, -montant);
+        // 1) Débiter la source
+        await adjustStock(chosen.source, -quantite, -montant);
 
-        // 2) Crédite la destination *seulement* si statut=true au moment de la création
-        if (statut && destination && !transferApplied) {
-          await adjustStock(destination, quantite, montant);
-          // Marquer comme appliqué pour éviter double crédit à l’update
+        // 2) Créditer la destination si statut=true (une seule fois)
+        if (statut && chosen.destination && !transferApplied) {
+          await adjustStock(chosen.destination, quantite, montant);
           await (doc.constructor as any).updateOne(
             { _id: (doc as any)._id, transferApplied: { $ne: true } },
             { $set: { transferApplied: true } },
@@ -243,7 +257,7 @@ export function attachMouvementHooks(MouvementStockSchema: mongoose.Schema) {
     }
   });
 
-  // PRE UPDATE
+  // PRE UPDATE: snapshot ancien doc
   MouvementStockSchema.pre("findOneAndUpdate", async function (next) {
     try {
       (this as any)._oldDoc = await (this.model as any)
@@ -256,7 +270,7 @@ export function attachMouvementHooks(MouvementStockSchema: mongoose.Schema) {
     }
   });
 
-  // POST UPDATE
+  // POST UPDATE: crédit différé si Livraison passe false->true
   MouvementStockSchema.post("findOneAndUpdate", async function (resDoc: any) {
     try {
       if (!resDoc) return;
@@ -267,14 +281,11 @@ export function attachMouvementHooks(MouvementStockSchema: mongoose.Schema) {
         .exec();
       if (!oldDoc || !newDoc) return;
 
-      // Transition false -> true ?
       const wasFalse = !oldDoc.statut;
       const isTrue = !!newDoc.statut;
 
       if (newDoc.type !== "Livraison") return;
       if (!(wasFalse && isTrue)) return;
-
-      // Créditer la destination si pas encore fait
       if (newDoc.transferApplied) return;
 
       const { destination, reasonIfInvalid } = computeLivraisonScopes(newDoc);
@@ -294,4 +305,11 @@ export function attachMouvementHooks(MouvementStockSchema: mongoose.Schema) {
       console.error("Erreur post-update MouvementStock:", err);
     }
   });
+}
+
+// Attacher une seule fois
+if (!(mongoose as any)._mvtHooksAttached) {
+  // @ts-ignore: obtenir le schema depuis mongoose.models si nécessaire
+  // Exemple: import { MouvementStock } du côté modèle et appeler attachMouvementHooks(MouvementStock.schema)
+  (mongoose as any)._mvtHooksAttached = true;
 }

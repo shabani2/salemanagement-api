@@ -271,12 +271,10 @@ export const getAllCommandes = async (
     const formatted = await Promise.all(commandes.map(formatCommande));
     res.status(200).json({ total, commandes: formatted });
   } catch (error) {
-    res
-      .status(400)
-      .json({
-        message: "Erreur lors de la récupération des commandes.",
-        error: (error as Error).message,
-      });
+    res.status(400).json({
+      message: "Erreur lors de la récupération des commandes.",
+      error: (error as Error).message,
+    });
   }
 };
 
@@ -302,12 +300,10 @@ export const getCommandesByUser = async (
     const formatted = await Promise.all(commandes.map(formatCommande));
     res.status(200).json({ total, commandes: formatted });
   } catch (error) {
-    res
-      .status(400)
-      .json({
-        message: "Erreur lors de la récupération des commandes utilisateur.",
-        error: (error as Error).message,
-      });
+    res.status(400).json({
+      message: "Erreur lors de la récupération des commandes utilisateur.",
+      error: (error as Error).message,
+    });
   }
 };
 
@@ -365,14 +361,12 @@ export const getCommandesByPointVente = async (
     ]);
 
     const formatted = await Promise.all(commandes.map(formatCommande));
-    res
-      .status(200)
-      .json({
-        total,
-        commandes: formatted,
-        page: Math.floor(skip / limit) + 1,
-        limit,
-      });
+    res.status(200).json({
+      total,
+      commandes: formatted,
+      page: Math.floor(skip / limit) + 1,
+      limit,
+    });
   } catch (error) {
     res.status(400).json({
       message:
@@ -409,14 +403,12 @@ export const getCommandesByRegion = async (
     ]);
 
     const formatted = await Promise.all(commandes.map(formatCommande));
-    res
-      .status(200)
-      .json({
-        total,
-        commandes: formatted,
-        page: Math.floor(skip / limit) + 1,
-        limit,
-      });
+    res.status(200).json({
+      total,
+      commandes: formatted,
+      page: Math.floor(skip / limit) + 1,
+      limit,
+    });
   } catch (error) {
     res.status(400).json({
       message:
@@ -448,13 +440,10 @@ export const getCommandesByRequestedRegion = async (
     const formatted = await Promise.all(commandes.map(formatCommande));
     res.status(200).json({ total, commandes: formatted });
   } catch (error) {
-    res
-      .status(400)
-      .json({
-        message:
-          "Erreur lors des commandes par région source (requestedRegion).",
-        error: (error as Error).message,
-      });
+    res.status(400).json({
+      message: "Erreur lors des commandes par région source (requestedRegion).",
+      error: (error as Error).message,
+    });
   }
 };
 
@@ -480,13 +469,11 @@ export const getCommandesByRequestedPointVente = async (
     const formatted = await Promise.all(commandes.map(formatCommande));
     res.status(200).json({ total, commandes: formatted });
   } catch (error) {
-    res
-      .status(400)
-      .json({
-        message:
-          "Erreur lors des commandes par point de vente source (requestedPointVente).",
-        error: (error as Error).message,
-      });
+    res.status(400).json({
+      message:
+        "Erreur lors des commandes par point de vente source (requestedPointVente).",
+      error: (error as Error).message,
+    });
   }
 };
 
@@ -512,12 +499,10 @@ export const getCommandesByFournisseur = async (
     const formatted = await Promise.all(commandes.map(formatCommande));
     res.status(200).json({ total, commandes: formatted });
   } catch (error) {
-    res
-      .status(400)
-      .json({
-        message: "Erreur lors des commandes par fournisseur.",
-        error: (error as Error).message,
-      });
+    res.status(400).json({
+      message: "Erreur lors des commandes par fournisseur.",
+      error: (error as Error).message,
+    });
   }
 };
 
@@ -566,21 +551,15 @@ const assertProduitsOr400 = (
 ): { ok: true } | { ok: false } => {
   const produits = req.body?.produits;
   if (!Array.isArray(produits) || produits.length === 0) {
-    res
-      .status(400)
-      .json({
-        message:
-          "Les produits sont requis et doivent être un tableau non vide.",
-      });
+    res.status(400).json({
+      message: "Les produits sont requis et doivent être un tableau non vide.",
+    });
     return { ok: false };
   }
   if (!produits.every(isValidProductItem)) {
-    res
-      .status(400)
-      .json({
-        message:
-          "Chaque produit doit contenir { produit:ObjectId, quantite>0 }.",
-      });
+    res.status(400).json({
+      message: "Chaque produit doit contenir { produit:ObjectId, quantite>0 }.",
+    });
     return { ok: false };
   }
   return { ok: true };
@@ -677,127 +656,6 @@ export const createCommande = async (
   }
 };
 
-export const updateCommande = async (
-  req: Request,
-  res: Response,
-): Promise<void> => {
-  try {
-    const { id } = req.params;
-    const { produits: produitsUpdates, ...updateDataRaw } = req.body;
-
-    const existing = await (Commande as any).findById(id);
-    if (!existing) {
-      res.status(404).json({ message: "Commande non trouvée." });
-      return;
-    }
-
-    // On ne force aucun champ optionnel: on applique seulement les clés définies
-    const updateData = pickDefined({
-      user: updateDataRaw.user,
-      region: updateDataRaw.region,
-      pointVente: updateDataRaw.pointVente,
-      requestedRegion: updateDataRaw.requestedRegion,
-      requestedPointVente: updateDataRaw.requestedPointVente,
-      fournisseur: updateDataRaw.fournisseur,
-      depotCentral: updateDataRaw.depotCentral,
-      statut: updateDataRaw.statut,
-      numero: updateDataRaw.numero, // si jamais vous autorisez l’édition
-    });
-
-    const preview = { ...existing.toObject(), ...updateData };
-    resolveRouting(preview);
-
-    const commande = await (Commande as any).findByIdAndUpdate(
-      id,
-      { $set: updateData },
-      { new: true },
-    );
-    if (!commande) {
-      res.status(404).json({ message: "Commande non trouvée." });
-      return;
-    }
-
-    if (Array.isArray(produitsUpdates) && produitsUpdates.length > 0) {
-      for (const prodUpdate of produitsUpdates) {
-        const { _id: produitId, statut, quantite, ...rest } = prodUpdate || {};
-        if (!produitId) continue;
-
-        const produitCommande = await (CommandeProduit as any).findById(
-          produitId,
-        );
-        if (!produitCommande) continue;
-
-        // Mises à jour partielles sur l'item
-        for (const [k, v] of Object.entries(rest)) {
-          (produitCommande as any)[k] = v;
-        }
-        if (typeof quantite === "number" && quantite > 0) {
-          produitCommande.quantite = quantite;
-        }
-
-        // Passage en "livré" => MouvementStock
-        if (statut && statut !== produitCommande.statut) {
-          if (statut === "livré") {
-            if (produitCommande.statut !== "livré") {
-              const mouvementData: any = {
-                produit: produitCommande.produit,
-                quantite:
-                  typeof quantite === "number" && quantite > 0
-                    ? quantite
-                    : produitCommande.quantite,
-                montant: prodUpdate.montant ?? 0,
-                type: "Livraison",
-                statut: true,
-                user: updateData.user ?? existing.user, // fallback
-                commandeId: commande._id,
-                depotCentral: !!(preview.depotCentral || false),
-              };
-              if (preview.pointVente)
-                mouvementData.pointVente = preview.pointVente;
-              if (preview.region) mouvementData.region = preview.region;
-
-              const mouvement = new (MouvementStock as any)(mouvementData);
-              await mouvement.save();
-
-              produitCommande.mouvementStockId = mouvement._id;
-              produitCommande.statut = "livré";
-            }
-          } else {
-            produitCommande.statut = statut;
-          }
-        }
-
-        await produitCommande.save();
-      }
-    }
-
-    const produitsCommande = await (CommandeProduit as any).find({
-      commandeId: commande._id,
-    });
-    const tousLivres =
-      produitsCommande.length > 0 &&
-      produitsCommande.every((p: any) => p.statut === "livré");
-
-    if (tousLivres && commande.statut !== "livrée") {
-      commande.statut = "livrée";
-      await commande.save();
-    }
-
-    const populated = await (Commande as any)
-      .findById(commande._id)
-      .populate(commonPopulate as any)
-      .populate({ path: "produits", populate: { path: "produit" } });
-
-    res.status(200).json(populated);
-  } catch (error) {
-    const status = (error as any)?.status || 400;
-    res.status(status).json({
-      message: "Erreur lors de la mise à jour de la commande.",
-      error: (error as Error).message,
-    });
-  }
-};
-
 export const deleteCommande = async (
   req: Request,
   res: Response,
@@ -841,6 +699,341 @@ export const printCommande = async (
   } catch (error) {
     res.status(500).json({
       message: "Erreur lors de l'impression du bon de commande.",
+      error: (error as Error).message,
+    });
+  }
+};
+
+// ---- Helper: mapping route -> type mouvement + coordonnées ----
+// Pourquoi: ne pas passer de mauvaises coordonnées au MouvementStock.
+//type Route = { source: "PV" | "REGION" | "CENTRAL"; destination: "REGION" | "PV" | "CENTRAL" | "FOURNISSEUR" };
+function buildMvtMetaFromRoute(route: Route, cmd: any) {
+  // Livraison gérée nativement par computeLivraisonScopes:
+  // - CENTRAL -> REGION/PV
+  // - REGION  -> PV
+  if (
+    route.source === "CENTRAL" &&
+    (route.destination === "REGION" || route.destination === "PV")
+  ) {
+    return {
+      type: "Livraison" as const,
+      coords: {
+        depotCentral: true,
+        ...(route.destination === "REGION" ? { region: cmd.region } : {}),
+        ...(route.destination === "PV" ? { pointVente: cmd.pointVente } : {}),
+      },
+    };
+  }
+  if (route.source === "REGION" && route.destination === "PV") {
+    return {
+      type: "Livraison" as const,
+      coords: {
+        region: cmd.region,
+        pointVente: cmd.pointVente,
+      },
+    };
+  }
+
+  // Tout le reste -> Sortie (décrément seulement, pas de crédit auto)
+  // Exemples: PV->REGION/CENTRAL, REGION->CENTRAL, *->FOURNISSEUR, REGION->REGION...
+  const coordsSource =
+    route.source === "CENTRAL"
+      ? { depotCentral: true }
+      : route.source === "REGION"
+        ? { region: cmd.requestedRegion ?? cmd.region }
+        : { pointVente: cmd.requestedPointVente ?? cmd.pointVente };
+
+  return { type: "Sortie" as const, coords: coordsSource };
+}
+
+// path: src/controllers/commandeController.ts  (UPDATE UNIQUEMENT)
+
+type AdjustStockFilter = {
+  produit: mongoose.Types.ObjectId;
+  region?: mongoose.Types.ObjectId;
+  pointVente?: mongoose.Types.ObjectId;
+  depotCentral?: boolean;
+};
+
+/** Pourquoi: fabrique l’override inversé {source,destination} attendu par les hooks. */
+
+type MObjId = mongoose.Types.ObjectId;
+
+function buildLivraisonOverrideFromInvertedRoute(
+  route: ReturnType<typeof resolveRouting>,
+  cmd: any,
+  produitId: MObjId,
+): LivraisonOverride {
+  const o: LivraisonOverride = {};
+
+  // Mouvement.source = Commande.destination
+  switch (route.destination) {
+    case "REGION":
+      if (cmd.region) o.source = { produit: produitId, region: cmd.region };
+      break;
+    case "PV":
+      if (cmd.pointVente)
+        o.source = { produit: produitId, pointVente: cmd.pointVente };
+      break;
+    case "CENTRAL":
+      o.source = { produit: produitId, depotCentral: true };
+      break;
+    // "FOURNISSEUR": pas de stock pour l’instant → pas d’override.source
+  }
+
+  // Mouvement.destination = Commande.source
+  switch (route.source) {
+    case "REGION":
+      if (cmd.requestedRegion)
+        o.destination = { produit: produitId, region: cmd.requestedRegion };
+      break;
+    case "PV":
+      if (cmd.requestedPointVente)
+        o.destination = {
+          produit: produitId,
+          pointVente: cmd.requestedPointVente,
+        };
+      break;
+    case "CENTRAL":
+      o.destination = { produit: produitId, depotCentral: true };
+      break;
+  }
+
+  return o;
+}
+
+// path: src/controllers/commandeController.ts  (remplace la fonction updateCommande + helper)
+
+// Assumptions: resolveRouting, pickDefined, commonPopulate, formatCommande déjà définis dans ce fichier
+
+type MId = mongoose.Types.ObjectId;
+
+type LivraisonEnd = {
+  produit: MId;
+  region?: MId;
+  pointVente?: MId;
+  depotCentral?: boolean;
+};
+
+type LivraisonOverride = {
+  source?: LivraisonEnd;
+  destination?: LivraisonEnd;
+};
+
+type Route = ReturnType<typeof resolveRouting>; // { source: "PV"|"REGION"|"CENTRAL"; destination: "REGION"|"PV"|"CENTRAL"|"FOURNISSEUR" }
+
+/** Pourquoi: fabrique l’override **inversé** attendu par les hooks (commande S→D ⇢ mouvement S’=D, D’=S). */
+function buildInvertedOverride(
+  route: Route,
+  cmd: any,
+  produitId: MId,
+): LivraisonOverride {
+  const o: LivraisonOverride = {};
+
+  // Mouvement.source = Commande.destination
+  switch (route.destination) {
+    case "REGION":
+      if (cmd.region) o.source = { produit: produitId, region: cmd.region };
+      break;
+    case "PV":
+      if (cmd.pointVente)
+        o.source = { produit: produitId, pointVente: cmd.pointVente };
+      break;
+    case "CENTRAL":
+      o.source = { produit: produitId, depotCentral: true };
+      break;
+    default:
+      // FOURNISSEUR → pas de stock ici
+      break;
+  }
+
+  // Mouvement.destination = Commande.source
+  switch (route.source) {
+    case "REGION":
+      if (cmd.requestedRegion)
+        o.destination = { produit: produitId, region: cmd.requestedRegion };
+      break;
+    case "PV":
+      if (cmd.requestedPointVente)
+        o.destination = {
+          produit: produitId,
+          pointVente: cmd.requestedPointVente,
+        };
+      break;
+    case "CENTRAL":
+      o.destination = { produit: produitId, depotCentral: true };
+      break;
+  }
+
+  return o;
+}
+
+/** Fusionne proprement les coords override en champs visibles, sans cast `{}`. */
+function visibleCoordsFromOverride(o: LivraisonOverride): Partial<{
+  region: MId;
+  pointVente: MId;
+  depotCentral: boolean;
+}> {
+  const out: Partial<{ region: MId; pointVente: MId; depotCentral: boolean }> =
+    {};
+
+  // Préfère la destination côté reporting, sinon la source
+  if (o.destination?.region || o.source?.region) {
+    out.region = o.destination?.region ?? o.source?.region;
+  }
+  if (o.destination?.pointVente || o.source?.pointVente) {
+    out.pointVente = o.destination?.pointVente ?? o.source?.pointVente;
+  }
+  if (o.destination?.depotCentral || o.source?.depotCentral) {
+    out.depotCentral = true;
+  }
+
+  return out;
+}
+
+export const updateCommande = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { produits: produitsUpdates, ...updateDataRaw } = req.body;
+
+    const existing = await (Commande as any).findById(id);
+    if (!existing) {
+      res.status(404).json({ message: "Commande non trouvée." });
+      return;
+    }
+
+    // Appliquer uniquement les clés définies
+    const updateData = pickDefined({
+      user: updateDataRaw.user,
+      region: updateDataRaw.region,
+      pointVente: updateDataRaw.pointVente,
+      requestedRegion: updateDataRaw.requestedRegion,
+      requestedPointVente: updateDataRaw.requestedPointVente,
+      fournisseur: updateDataRaw.fournisseur,
+      depotCentral: updateDataRaw.depotCentral,
+      statut: updateDataRaw.statut,
+      numero: updateDataRaw.numero,
+    });
+
+    // Valider la route finale avant persistance (lève HttpError si invalide)
+    resolveRouting({ ...existing.toObject(), ...updateData });
+
+    // Persister l’en-tête
+    const commande = await (Commande as any).findByIdAndUpdate(
+      id,
+      { $set: updateData },
+      { new: true },
+    );
+    if (!commande) {
+      res.status(404).json({ message: "Commande non trouvée." });
+      return;
+    }
+
+    // Route persistée
+    const route = resolveRouting(commande.toObject());
+
+    // Mises à jour des lignes
+    if (Array.isArray(produitsUpdates) && produitsUpdates.length > 0) {
+      for (const prodUpdate of produitsUpdates) {
+        const {
+          _id: produitLigneId,
+          statut,
+          quantite,
+          ...rest
+        } = prodUpdate || {};
+        if (!produitLigneId) continue;
+
+        const produitCommande = await (CommandeProduit as any).findById(
+          produitLigneId,
+        );
+        if (!produitCommande) continue;
+
+        // Patch partiel
+        for (const [k, v] of Object.entries(rest)) {
+          (produitCommande as any)[k] = v;
+        }
+        if (typeof quantite === "number" && quantite > 0) {
+          produitCommande.quantite = quantite;
+        }
+
+        const wasLivré = produitCommande.statut === "livré";
+        const willBeLivré = statut === "livré";
+
+        if (willBeLivré && !wasLivré) {
+          // Fournisseur: pas de mouvement stock pour l’instant
+          if (route.destination === "FOURNISSEUR") {
+            produitCommande.statut = "livré";
+            await produitCommande.save();
+            continue;
+          }
+
+          // Anti-doublon
+          if (!(produitCommande as any).mouvementStockId) {
+            const qty =
+              typeof quantite === "number" && quantite > 0
+                ? quantite
+                : (produitCommande.quantite as number);
+
+            const override = buildInvertedOverride(
+              route,
+              commande,
+              produitCommande.produit as MId,
+            );
+            const visible = visibleCoordsFromOverride(override);
+
+            const mouvement: any = new (MouvementStock as any)({
+              produit: produitCommande.produit,
+              quantite: qty,
+              montant: prodUpdate.montant ?? 0,
+              type: "Livraison",
+              statut: true,
+              user: updateData.user ?? existing.user,
+              commandeId: commande._id,
+              ...visible, // champs visibles sûrs (région/PV/central)
+            });
+
+            // Orientation imposée (les hooks lisent _livraisonScopes)
+            (mouvement as any)._livraisonScopes = override;
+
+            await mouvement.save();
+            (produitCommande as any).mouvementStockId = mouvement._id;
+          }
+
+          produitCommande.statut = "livré";
+        } else if (statut && statut !== produitCommande.statut) {
+          produitCommande.statut = statut;
+        }
+
+        await produitCommande.save();
+      }
+    }
+
+    // Statut global
+    const produitsCommande = await (CommandeProduit as any).find({
+      commandeId: commande._id,
+    });
+    const tousLivres =
+      produitsCommande.length > 0 &&
+      produitsCommande.every((p: any) => p.statut === "livré");
+
+    if (tousLivres && commande.statut !== "livrée") {
+      commande.statut = "livrée";
+      await commande.save();
+    }
+
+    const populated = await (Commande as any)
+      .findById(commande._id)
+      .populate(commonPopulate as any)
+      .populate({ path: "produits", populate: { path: "produit" } });
+
+    res.status(200).json(populated);
+  } catch (error) {
+    const status = (error as any)?.status || 400;
+    res.status(status).json({
+      message: "Erreur lors de la mise à jour de la commande.",
       error: (error as Error).message,
     });
   }

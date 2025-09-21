@@ -211,104 +211,104 @@ MouvementStockSchema.pre("save", async function (next) {
 
 // POST-SAVE LOGIC
 
-MouvementStockSchema.post("save", async function (doc) {
-  try {
-    const {
-      produit,
-      quantite,
-      type,
-      statut,
-      pointVente,
-      montant,
-      region,
-      depotCentral,
-      transferApplied,
-    } = doc as any;
+// MouvementStockSchema.post("save", async function (doc) {
+//   try {
+//     const {
+//       produit,
+//       quantite,
+//       type,
+//       statut,
+//       pointVente,
+//       montant,
+//       region,
+//       depotCentral,
+//       transferApplied,
+//     } = doc as any;
 
-    // ENTRÉE: on crédite directement la destination (region sinon central)
-    if (type === "Entrée") {
-      if (region) await adjustStock({ produit, region }, quantite, montant);
-      else
-        await adjustStock({ produit, depotCentral: true }, quantite, montant);
-      return;
-    }
+//     // ENTRÉE: on crédite directement la destination (region sinon central)
+//     if (type === "Entrée") {
+//       if (region) await adjustStock({ produit, region }, quantite, montant);
+//       else
+//         await adjustStock({ produit, depotCentral: true }, quantite, montant);
+//       return;
+//     }
 
-    // Pour les autres, si statut falsy et type !== Livraison, on ne touche pas (comportement existant)
-    if (!statut && type !== "Livraison") return;
+//     // Pour les autres, si statut falsy et type !== Livraison, on ne touche pas (comportement existant)
+//     if (!statut && type !== "Livraison") return;
 
-    // VENTE / SORTIE: décrémente la source quand statut=true
-    if (["Vente", "Sortie"].includes(type)) {
-      const { source, reasonIfInvalid } = computeOperationSource(doc);
-      if (!source) return console.error(reasonIfInvalid);
-      await adjustStock(source, -quantite, -montant);
-      return;
-    }
+//     // VENTE / SORTIE: décrémente la source quand statut=true
+//     if (["Vente", "Sortie"].includes(type)) {
+//       const { source, reasonIfInvalid } = computeOperationSource(doc);
+//       if (!source) return console.error(reasonIfInvalid);
+//       await adjustStock(source, -quantite, -montant);
+//       return;
+//     }
 
-    // LIVRAISON:
-    if (type === "Livraison") {
-      const { source, destination, reasonIfInvalid } =
-        computeLivraisonScopes(doc);
-      if (!source) return console.error(reasonIfInvalid);
+//     // LIVRAISON:
+//     if (type === "Livraison") {
+//       const { source, destination, reasonIfInvalid } =
+//         computeLivraisonScopes(doc);
+//       if (!source) return console.error(reasonIfInvalid);
 
-      // 1) Toujours décrémenter la source immédiatement
-      await adjustStock(source, -quantite, -montant);
+//       // 1) Toujours décrémenter la source immédiatement
+//       await adjustStock(source, -quantite, -montant);
 
-      // 2) Crédite la destination *seulement* si statut=true au moment de la création
-      if (statut && destination && !transferApplied) {
-        await adjustStock(destination, quantite, montant);
-        // Marquer comme appliqué pour éviter double crédit à l’update
-        await (doc.constructor as any).updateOne(
-          { _id: doc._id, transferApplied: { $ne: true } },
-          { $set: { transferApplied: true } },
-        );
-      }
-    }
-  } catch (err) {
-    console.error("Erreur post-save MouvementStock:", err);
-  }
-});
+//       // 2) Crédite la destination *seulement* si statut=true au moment de la création
+//       if (statut && destination && !transferApplied) {
+//         await adjustStock(destination, quantite, montant);
+//         // Marquer comme appliqué pour éviter double crédit à l’update
+//         await (doc.constructor as any).updateOne(
+//           { _id: doc._id, transferApplied: { $ne: true } },
+//           { $set: { transferApplied: true } },
+//         );
+//       }
+//     }
+//   } catch (err) {
+//     console.error("Erreur post-save MouvementStock:", err);
+//   }
+// });
 
 // On doit comparer ancien vs nouveau statut
-MouvementStockSchema.pre("save", async function (next) {
-  try {
-    const { type, statut, produit, quantite } = this as any;
+// MouvementStockSchema.pre("save", async function (next) {
+//   try {
+//     const { type, statut, produit, quantite } = this as any;
 
-    // Entrée & Commande: pas de contrôle de dispo
-    if (type === "Entrée" || type === "Commande") return next();
+//     // Entrée & Commande: pas de contrôle de dispo
+//     if (type === "Entrée" || type === "Commande") return next();
 
-    // LIVRAISON: vérifier le stock de la *source* uniquement
-    if (type === "Livraison") {
-      const { source, reasonIfInvalid } = computeLivraisonScopes(this);
-      if (!source)
-        return next(new Error(reasonIfInvalid || "Livraison invalide"));
+//     // LIVRAISON: vérifier le stock de la *source* uniquement
+//     if (type === "Livraison") {
+//       const { source, reasonIfInvalid } = computeLivraisonScopes(this);
+//       if (!source)
+//         return next(new Error(reasonIfInvalid || "Livraison invalide"));
 
-      const srcStock = await Stock.findOne(source).lean().exec();
-      if (!srcStock || srcStock.quantite < quantite) {
-        return next(new Error("Stock source insuffisant pour la livraison"));
-      }
-      return next();
-    }
+//       const srcStock = await Stock.findOne(source).lean().exec();
+//       if (!srcStock || srcStock.quantite < quantite) {
+//         return next(new Error("Stock source insuffisant pour la livraison"));
+//       }
+//       return next();
+//     }
 
-    // VENTE / SORTIE: vérifier la source selon depotCentral/region/pointVente
-    if (["Vente", "Sortie"].includes(type)) {
-      const { source, reasonIfInvalid } = computeOperationSource(this);
-      if (!source) return next(new Error(reasonIfInvalid || "Portée invalide"));
+//     // VENTE / SORTIE: vérifier la source selon depotCentral/region/pointVente
+//     if (["Vente", "Sortie"].includes(type)) {
+//       const { source, reasonIfInvalid } = computeOperationSource(this);
+//       if (!source) return next(new Error(reasonIfInvalid || "Portée invalide"));
 
-      // seulement si statut est activé, on “consomme”
-      if (statut) {
-        const s = await Stock.findOne(source).lean().exec();
-        if (!s || s.quantite < quantite) {
-          return next(new Error("Stock insuffisant pour l'opération"));
-        }
-      }
-      return next();
-    }
+//       // seulement si statut est activé, on “consomme”
+//       if (statut) {
+//         const s = await Stock.findOne(source).lean().exec();
+//         if (!s || s.quantite < quantite) {
+//           return next(new Error("Stock insuffisant pour l'opération"));
+//         }
+//       }
+//       return next();
+//     }
 
-    next();
-  } catch (error) {
-    next(error as mongoose.CallbackError);
-  }
-});
+//     next();
+//   } catch (error) {
+//     next(error as mongoose.CallbackError);
+//   }
+// });
 
 // POST-SAVE LOGIC
 

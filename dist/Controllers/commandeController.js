@@ -305,12 +305,10 @@ const getAllCommandes = (req, res) =>
       const formatted = yield Promise.all(commandes.map(formatCommande));
       res.status(200).json({ total, commandes: formatted });
     } catch (error) {
-      res
-        .status(400)
-        .json({
-          message: "Erreur lors de la récupération des commandes.",
-          error: error.message,
-        });
+      res.status(400).json({
+        message: "Erreur lors de la récupération des commandes.",
+        error: error.message,
+      });
     }
   });
 exports.getAllCommandes = getAllCommandes;
@@ -331,12 +329,10 @@ const getCommandesByUser = (req, res) =>
       const formatted = yield Promise.all(commandes.map(formatCommande));
       res.status(200).json({ total, commandes: formatted });
     } catch (error) {
-      res
-        .status(400)
-        .json({
-          message: "Erreur lors de la récupération des commandes utilisateur.",
-          error: error.message,
-        });
+      res.status(400).json({
+        message: "Erreur lors de la récupération des commandes utilisateur.",
+        error: error.message,
+      });
     }
   });
 exports.getCommandesByUser = getCommandesByUser;
@@ -384,14 +380,12 @@ const getCommandesByPointVente = (req, res) =>
         model_1.Commande.countDocuments(query),
       ]);
       const formatted = yield Promise.all(commandes.map(formatCommande));
-      res
-        .status(200)
-        .json({
-          total,
-          commandes: formatted,
-          page: Math.floor(skip / limit) + 1,
-          limit,
-        });
+      res.status(200).json({
+        total,
+        commandes: formatted,
+        page: Math.floor(skip / limit) + 1,
+        limit,
+      });
     } catch (error) {
       res.status(400).json({
         message:
@@ -421,14 +415,12 @@ const getCommandesByRegion = (req, res) =>
         model_1.Commande.countDocuments(query),
       ]);
       const formatted = yield Promise.all(commandes.map(formatCommande));
-      res
-        .status(200)
-        .json({
-          total,
-          commandes: formatted,
-          page: Math.floor(skip / limit) + 1,
-          limit,
-        });
+      res.status(200).json({
+        total,
+        commandes: formatted,
+        page: Math.floor(skip / limit) + 1,
+        limit,
+      });
     } catch (error) {
       res.status(400).json({
         message:
@@ -455,13 +447,11 @@ const getCommandesByRequestedRegion = (req, res) =>
       const formatted = yield Promise.all(commandes.map(formatCommande));
       res.status(200).json({ total, commandes: formatted });
     } catch (error) {
-      res
-        .status(400)
-        .json({
-          message:
-            "Erreur lors des commandes par région source (requestedRegion).",
-          error: error.message,
-        });
+      res.status(400).json({
+        message:
+          "Erreur lors des commandes par région source (requestedRegion).",
+        error: error.message,
+      });
     }
   });
 exports.getCommandesByRequestedRegion = getCommandesByRequestedRegion;
@@ -484,13 +474,11 @@ const getCommandesByRequestedPointVente = (req, res) =>
       const formatted = yield Promise.all(commandes.map(formatCommande));
       res.status(200).json({ total, commandes: formatted });
     } catch (error) {
-      res
-        .status(400)
-        .json({
-          message:
-            "Erreur lors des commandes par point de vente source (requestedPointVente).",
-          error: error.message,
-        });
+      res.status(400).json({
+        message:
+          "Erreur lors des commandes par point de vente source (requestedPointVente).",
+        error: error.message,
+      });
     }
   });
 exports.getCommandesByRequestedPointVente = getCommandesByRequestedPointVente;
@@ -511,12 +499,10 @@ const getCommandesByFournisseur = (req, res) =>
       const formatted = yield Promise.all(commandes.map(formatCommande));
       res.status(200).json({ total, commandes: formatted });
     } catch (error) {
-      res
-        .status(400)
-        .json({
-          message: "Erreur lors des commandes par fournisseur.",
-          error: error.message,
-        });
+      res.status(400).json({
+        message: "Erreur lors des commandes par fournisseur.",
+        error: error.message,
+      });
     }
   });
 exports.getCommandesByFournisseur = getCommandesByFournisseur;
@@ -556,21 +542,15 @@ const assertProduitsOr400 = (req, res) => {
   const produits =
     (_a = req.body) === null || _a === void 0 ? void 0 : _a.produits;
   if (!Array.isArray(produits) || produits.length === 0) {
-    res
-      .status(400)
-      .json({
-        message:
-          "Les produits sont requis et doivent être un tableau non vide.",
-      });
+    res.status(400).json({
+      message: "Les produits sont requis et doivent être un tableau non vide.",
+    });
     return { ok: false };
   }
   if (!produits.every(isValidProductItem)) {
-    res
-      .status(400)
-      .json({
-        message:
-          "Chaque produit doit contenir { produit:ObjectId, quantite>0 }.",
-      });
+    res.status(400).json({
+      message: "Chaque produit doit contenir { produit:ObjectId, quantite>0 }.",
+    });
     return { ok: false };
   }
   return { ok: true };

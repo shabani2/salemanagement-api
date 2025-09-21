@@ -371,12 +371,10 @@ function renderCommandePdf(res_1, payload_1) {
         );
         // Ligne 1 : nom + quantité (droite)
         doc.font("Helvetica-Bold").text(nom, x0, doc.y, { width: leftW });
-        doc
-          .font("Helvetica")
-          .text(String(qte), x0 + leftW, doc.y, {
-            width: rightW,
-            align: "right",
-          });
+        doc.font("Helvetica").text(String(qte), x0 + leftW, doc.y, {
+          width: rightW,
+          align: "right",
+        });
         // Ligne 2 : statut
         doc.font("Helvetica").fontSize(FS.small).fillColor("#555");
         doc.text(`Statut: ${statut}`, x0, doc.y, { width: leftW });

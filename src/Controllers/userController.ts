@@ -6,6 +6,10 @@ import { AuthenticatedRequest } from "../Middlewares/auth";
 import { uploadFile } from "../services/uploadService";
 import { MulterRequest } from "../Models/multerType";
 
+/**
+ * Liste paginée/filtrée des utilisateurs.
+ * Pourquoi: projection pure inclusion (évite l'erreur 31254) + return après res.json.
+ */
 export const getAllUsers = async (req: Request, res: Response) => {
   try {
     const page = Math.max(1, Number(req.query.page) || 1);
@@ -51,7 +55,7 @@ export const getAllUsers = async (req: Request, res: Response) => {
       },
       { $unwind: { path: "$pointVente", preserveNullAndEmptyArrays: true } },
 
-      // --- FIX ROBUSTE: convertir l'ID de région du PV si string → ObjectId
+      // convertir ID région du PV si string → ObjectId
       {
         $addFields: {
           pvRegionId: {
@@ -77,7 +81,7 @@ export const getAllUsers = async (req: Request, res: Response) => {
         },
       },
 
-      // région du pointVente (lookup standard sur pvRegionId)
+      // région du pointVente
       {
         $lookup: {
           from: "regions",
@@ -122,6 +126,7 @@ export const getAllUsers = async (req: Request, res: Response) => {
             },
           ]
         : []),
+
       ...(pointVenteId && Types.ObjectId.isValid(pointVenteId)
         ? [{ $match: { "pointVente._id": new Types.ObjectId(pointVenteId) } }]
         : []),
@@ -145,9 +150,11 @@ export const getAllUsers = async (req: Request, res: Response) => {
           ]
         : []),
 
-      // shape final
+      // projection PURE INCLUSION (ne pas exclure pvRegionId/pvRegion ici)
       {
         $project: {
+          // Autorisé: exclusion de _id si souhaité
+          // _id: 0,
           nom: 1,
           prenom: 1,
           email: 1,
@@ -157,13 +164,10 @@ export const getAllUsers = async (req: Request, res: Response) => {
           image: 1,
           createdAt: 1,
           updatedAt: 1,
-          region: 1, // doc region (si défini)
-          pointVente: 1, // doc pointVente + region peuplée
+          region: 1,
+          pointVente: 1,
           regionNom: 1,
           pointVenteNom: 1,
-          // Nettoyage interne
-          pvRegionId: 0,
-          pvRegion: 0,
         },
       },
 
@@ -203,6 +207,7 @@ export const getAllUsers = async (req: Request, res: Response) => {
           hasNext: page < totalPages,
         },
       });
+      return; // important: évite un second res.json
     }
 
     const data = await User.aggregate([
@@ -228,8 +233,10 @@ export const getAllUsers = async (req: Request, res: Response) => {
   }
 };
 
-// --- le reste de ton contrôleur inchangé ---
-
+/**
+ * Par région.
+ * Pourquoi: `return` la délégation pour ne pas répondre deux fois.
+ */
 export const getUsersByRegion = async (
   req: AuthenticatedRequest,
   res: Response,
@@ -243,23 +250,29 @@ export const getUsersByRegion = async (
 
     if (!regionId || !Types.ObjectId.isValid(regionId)) {
       res.status(400).json({ message: "regionId invalide" });
+      return;
     }
 
     (req.query as any).region = regionId;
-    getAllUsers(req as unknown as Request, res);
+    return getAllUsers(req as unknown as Request, res);
   } catch (err) {
     res.status(500).json({ message: "Erreur interne", error: err });
   }
 };
 
+/**
+ * Par point de vente.
+ * Pourquoi: `return` la délégation pour ne pas répondre deux fois.
+ */
 export const getUsersByPointVente = async (req: Request, res: Response) => {
   try {
-    const { pointVenteId } = req.params;
+    const { pointVenteId } = req.params as { pointVenteId?: string };
     if (!pointVenteId || !Types.ObjectId.isValid(pointVenteId)) {
       res.status(400).json({ message: "ID du point de vente invalide" });
+      return;
     }
     (req.query as any).pointVente = pointVenteId;
-    getAllUsers(req, res);
+    return getAllUsers(req, res);
   } catch (err) {
     console.error("Erreur dans getUsersByPointVente:", err);
     res.status(500).json({ message: "Erreur interne", error: err });

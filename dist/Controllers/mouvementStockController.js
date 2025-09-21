@@ -197,16 +197,14 @@ const getAllMouvementsStockPage = (req, res) =>
         _g !== void 0
           ? _g
           : 500;
-      res
-        .status(status)
-        .json({
-          message: "Erreur interne",
-          error:
-            (_h = err === null || err === void 0 ? void 0 : err.message) !==
-              null && _h !== void 0
-              ? _h
-              : err,
-        });
+      res.status(status).json({
+        message: "Erreur interne",
+        error:
+          (_h = err === null || err === void 0 ? void 0 : err.message) !==
+            null && _h !== void 0
+            ? _h
+            : err,
+      });
       return;
     }
   });
@@ -237,15 +235,13 @@ const getMouvementStockByRegionPage = (req, res) =>
         _a !== void 0
           ? _a
           : 500;
-      res
-        .status(status)
-        .json({
-          message:
-            (_b = err === null || err === void 0 ? void 0 : err.message) !==
-              null && _b !== void 0
-              ? _b
-              : "Erreur interne",
-        });
+      res.status(status).json({
+        message:
+          (_b = err === null || err === void 0 ? void 0 : err.message) !==
+            null && _b !== void 0
+            ? _b
+            : "Erreur interne",
+      });
       return;
     }
   });
@@ -271,15 +267,13 @@ const getMouvementsStockByPointVentePage = (req, res) =>
         _a !== void 0
           ? _a
           : 500;
-      res
-        .status(status)
-        .json({
-          message:
-            (_b = err === null || err === void 0 ? void 0 : err.message) !==
-              null && _b !== void 0
-              ? _b
-              : "Erreur interne",
-        });
+      res.status(status).json({
+        message:
+          (_b = err === null || err === void 0 ? void 0 : err.message) !==
+            null && _b !== void 0
+            ? _b
+            : "Erreur interne",
+      });
       return;
     }
   });
