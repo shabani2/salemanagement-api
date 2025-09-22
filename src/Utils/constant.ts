@@ -7,3 +7,20 @@ export const UserRole = [
   "Client",
   "Logisticien",
 ] as const;
+
+export type UserRoleType =
+  | "SuperAdmin"
+  | "AdminRegion"
+  | "AdminPointVente"
+  | "Vendeur"
+  | "Logisticien"
+  | "Client";
+
+export const USER_ROLES: UserRoleType[] = [
+  "SuperAdmin",
+  "AdminRegion",
+  "AdminPointVente",
+  "Vendeur",
+  "Logisticien",
+  "Client",
+];

@@ -1,6 +1,6 @@
 // models.ts
 import mongoose, { Schema, Document } from "mongoose";
-import { UserRole } from "../Utils/constant";
+import { USER_ROLES, UserRole } from "../Utils/constant";
 import {
   ICategorie,
   ICommande,
@@ -32,13 +32,21 @@ const UserSchema = new Schema<IUser>(
     telephone: { type: String, required: true, unique: true },
     email: { type: String, required: true, unique: true },
     adresse: { type: String, required: true },
-    password: { type: String, required: true },
-    role: { type: String, enum: UserRole, required: true },
+    password: { type: String }, // pas requis à la création
+    role: { type: String, enum: USER_ROLES, required: true },
     image: { type: String },
     pointVente: { type: Schema.Types.ObjectId, ref: "PointVente" },
     region: { type: Schema.Types.ObjectId, ref: "Region" },
+    firstConnection: { type: Boolean, default: true },
+    emailVerified: { type: Boolean, default: false },
+    isActive: { type: Boolean, default: true },
+    tokenVersion: { type: Number, default: 0 },
+    emailVerifyTokenHash: { type: String, default: null },
+    emailVerifyTokenExpires: { type: Date, default: null },
+    resetPasswordTokenHash: { type: String, default: null },
+    resetPasswordTokenExpires: { type: Date, default: null },
   },
-  { timestamps: true },
+  { timestamps: true }
 );
 
 const CategorieSchema = new Schema<ICategorie>(
@@ -319,14 +327,14 @@ if (!(MouvementStockSchema as any)._hooksAttached) {
   (MouvementStockSchema as any)._hooksAttached = true;
 }
 
-UserSchema.methods.comparePassword = async function (
-  candidatePassword: string,
-): Promise<boolean> {
-  console.log("Comparaison mdp =>");
-  console.log("Mot de passe en clair:", candidatePassword);
-  console.log("Mot de passe hashé:", this.password);
-  return await bcrypt.compare(candidatePassword, this.password);
-};
+// UserSchema.methods.comparePassword = async function (
+//   candidatePassword: string,
+// ): Promise<boolean> {
+//   console.log("Comparaison mdp =>");
+//   console.log("Mot de passe en clair:", candidatePassword);
+//   console.log("Mot de passe hashé:", this.password);
+//   return await bcrypt.compare(candidatePassword, this.password);
+// };
 
 export const User = mongoose.model<IUser>("User", UserSchema);
 
@@ -455,3 +463,30 @@ export const CommandeSchema = new Schema<ICommande>(
 );
 
 export const Commande = mongoose.model<ICommande>("Commande", CommandeSchema);
+
+
+
+
+UserSchema.pre<IUser>("save", async function (next) {
+  // Pourquoi: garantir hash si password défini/modifié
+  if (!this.isModified("password") || !this.password) return next();
+  const salt = await bcrypt.genSalt(12);
+  this.password = await bcrypt.hash(this.password, salt);
+  next();
+});
+// UserSchema.methods.comparePassword = async function (candidate: string) {
+//   if (!this.password) return false;
+//   return bcrypt.compare(candidate, this.password);
+// };
+
+
+UserSchema.methods.comparePassword = async function (candidate: string) {
+  if (!this.password) return false;
+  return bcrypt.compare(candidate, this.password);
+};
+
+UserSchema.methods.bumpTokenVersion = async function () {
+  // Invalide tous les JWT existants (payload.ver)
+  this.tokenVersion += 1;
+  await this.save();
+};
