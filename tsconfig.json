@@ -105,6 +105,6 @@
     "types": ["node", "jest"],
     "typeRoots": ["./node_modules/@types", "./src/Models"]
   },
-  "include": ["src"],
+  "include": ["src"],  
   "exclude": ["node_modules", "**/*.test.ts"]
 }

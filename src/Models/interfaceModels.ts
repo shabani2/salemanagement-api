@@ -4,7 +4,7 @@ import { UserRoleType } from "./model";
 // Modèle Utilisateur
 
 export interface IUser extends Document {
-  isModified(arg0: string): unknown;
+ 
   nom: string;
   prenom: string;
   telephone: string;

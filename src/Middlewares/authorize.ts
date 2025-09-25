@@ -1,13 +1,20 @@
-/************** middleware/authorize.ts **************/
-import { Request, Response, NextFunction } from "express";
-import { AuthenticatedRequest } from "./auth";
+// file: src/Middlewares/authorize.ts
+import type { RequestHandler } from "express";
+import type { IUser } from "../Models/interfaceModels";
 
-export const authorize =
-  (roles: string[]) =>
-  (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
+// Pourquoi: factory de middleware Express typé
+export const authorize = (
+  roles: ReadonlyArray<IUser["role"]> | ReadonlyArray<string>,
+): RequestHandler => {
+  return (req, res, next) => {
+    if (!req.user) {
+      res.status(401).json({ message: "Non authentifié" });
+      return;
+    }
     if (!roles.includes(req.user.role)) {
       res.status(403).json({ message: "Accès interdit" });
-      return; // Ajout d'un return explicite pour éviter l'erreur de type
+      return;
     }
-    return next(); // Ajout d'un return pour assurer un type `void`
+    next();
   };
+};

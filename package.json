@@ -9,7 +9,8 @@
     "build": "tsc",
     "heroku-postbuild": "npm run build",
     "start": "node dist/index.js",
-    "tsc": "tsc"
+    "tsc": "tsc",
+    "migrate:users:backfill": "tsx src/scripts/migrations/backfill-legacy-users.ts"
   },
   "keywords": [],
   "author": "",
@@ -49,6 +50,7 @@
     "express-async": "^0.1.3",
     "json2csv": "^6.0.0-alpha.2",
     "jsonwebtoken": "^9.0.2",
+    "mailersend": "^2.6.0",
     "mongodb": "^6.16.0",
     "mongoose": "^8.10.0",
     "morgan": "^1.10.0",
@@ -58,6 +60,7 @@
     "pdfkit": "^0.17.0",
     "salemanagement-api": "file:",
     "serverless-http": "^3.2.0",
+    "twilio": "^5.9.0",
     "xlsx": "^0.18.5"
   }
 }

@@ -1,5 +1,6 @@
 // models.ts
-import mongoose, { Schema, Document } from "mongoose";
+import mongoose, { Schema, Document , HydratedDocument } from "mongoose";
+
 import { USER_ROLES, UserRole } from "../Utils/constant";
 import {
   ICategorie,
@@ -25,6 +26,21 @@ import {
 
 export type UserRoleType = (typeof UserRole)[number];
 
+export type { UserDoc };
+
+
+declare global {
+  namespace Express {
+    interface Request {
+      /** Pourquoi: exposer l'utilisateur authentifié au reste de la stack */
+      user?: HydratedDocument<IUser>;
+    }
+  }
+}
+export {};
+
+type UserDoc = HydratedDocument<IUser>;
+
 const UserSchema = new Schema<IUser>(
   {
     nom: { type: String, required: true },
@@ -38,7 +54,7 @@ const UserSchema = new Schema<IUser>(
     pointVente: { type: Schema.Types.ObjectId, ref: "PointVente" },
     region: { type: Schema.Types.ObjectId, ref: "Region" },
     firstConnection: { type: Boolean, default: true },
-    emailVerified: { type: Boolean, default: false },
+    emailVerified: { type: Boolean, default: true },
     isActive: { type: Boolean, default: true },
     tokenVersion: { type: Number, default: 0 },
     emailVerifyTokenHash: { type: String, default: null },
@@ -217,124 +233,26 @@ MouvementStockSchema.pre("save", async function (next) {
   }
 });
 
-// POST-SAVE LOGIC
 
-// MouvementStockSchema.post("save", async function (doc) {
-//   try {
-//     const {
-//       produit,
-//       quantite,
-//       type,
-//       statut,
-//       pointVente,
-//       montant,
-//       region,
-//       depotCentral,
-//       transferApplied,
-//     } = doc as any;
+UserSchema.pre("save", async function (this: UserDoc) {
+  if (!this.password || !this.isModified("password")) return;
+  const salt = await bcrypt.genSalt(12);
+  this.password = await bcrypt.hash(this.password, salt);
+});
 
-//     // ENTRÉE: on crédite directement la destination (region sinon central)
-//     if (type === "Entrée") {
-//       if (region) await adjustStock({ produit, region }, quantite, montant);
-//       else
-//         await adjustStock({ produit, depotCentral: true }, quantite, montant);
-//       return;
-//     }
 
-//     // Pour les autres, si statut falsy et type !== Livraison, on ne touche pas (comportement existant)
-//     if (!statut && type !== "Livraison") return;
 
-//     // VENTE / SORTIE: décrémente la source quand statut=true
-//     if (["Vente", "Sortie"].includes(type)) {
-//       const { source, reasonIfInvalid } = computeOperationSource(doc);
-//       if (!source) return console.error(reasonIfInvalid);
-//       await adjustStock(source, -quantite, -montant);
-//       return;
-//     }
+UserSchema.methods.comparePassword = async function (candidate: string) {
+  if (!this.password) return false;
+  return bcrypt.compare(candidate, this.password);
+};
 
-//     // LIVRAISON:
-//     if (type === "Livraison") {
-//       const { source, destination, reasonIfInvalid } =
-//         computeLivraisonScopes(doc);
-//       if (!source) return console.error(reasonIfInvalid);
+UserSchema.methods.bumpTokenVersion = async function () {
+  // Invalide tous les JWT existants (payload.ver)
+  this.tokenVersion += 1;
+  await this.save();
+};
 
-//       // 1) Toujours décrémenter la source immédiatement
-//       await adjustStock(source, -quantite, -montant);
-
-//       // 2) Crédite la destination *seulement* si statut=true au moment de la création
-//       if (statut && destination && !transferApplied) {
-//         await adjustStock(destination, quantite, montant);
-//         // Marquer comme appliqué pour éviter double crédit à l’update
-//         await (doc.constructor as any).updateOne(
-//           { _id: doc._id, transferApplied: { $ne: true } },
-//           { $set: { transferApplied: true } },
-//         );
-//       }
-//     }
-//   } catch (err) {
-//     console.error("Erreur post-save MouvementStock:", err);
-//   }
-// });
-
-// On doit comparer ancien vs nouveau statut
-// MouvementStockSchema.pre("save", async function (next) {
-//   try {
-//     const { type, statut, produit, quantite } = this as any;
-
-//     // Entrée & Commande: pas de contrôle de dispo
-//     if (type === "Entrée" || type === "Commande") return next();
-
-//     // LIVRAISON: vérifier le stock de la *source* uniquement
-//     if (type === "Livraison") {
-//       const { source, reasonIfInvalid } = computeLivraisonScopes(this);
-//       if (!source)
-//         return next(new Error(reasonIfInvalid || "Livraison invalide"));
-
-//       const srcStock = await Stock.findOne(source).lean().exec();
-//       if (!srcStock || srcStock.quantite < quantite) {
-//         return next(new Error("Stock source insuffisant pour la livraison"));
-//       }
-//       return next();
-//     }
-
-//     // VENTE / SORTIE: vérifier la source selon depotCentral/region/pointVente
-//     if (["Vente", "Sortie"].includes(type)) {
-//       const { source, reasonIfInvalid } = computeOperationSource(this);
-//       if (!source) return next(new Error(reasonIfInvalid || "Portée invalide"));
-
-//       // seulement si statut est activé, on “consomme”
-//       if (statut) {
-//         const s = await Stock.findOne(source).lean().exec();
-//         if (!s || s.quantite < quantite) {
-//           return next(new Error("Stock insuffisant pour l'opération"));
-//         }
-//       }
-//       return next();
-//     }
-
-//     next();
-//   } catch (error) {
-//     next(error as mongoose.CallbackError);
-//   }
-// });
-
-// POST-SAVE LOGIC
-
-// On doit comparer ancien vs nouveau statut
-
-if (!(MouvementStockSchema as any)._hooksAttached) {
-  attachMouvementHooks(MouvementStockSchema);
-  (MouvementStockSchema as any)._hooksAttached = true;
-}
-
-// UserSchema.methods.comparePassword = async function (
-//   candidatePassword: string,
-// ): Promise<boolean> {
-//   console.log("Comparaison mdp =>");
-//   console.log("Mot de passe en clair:", candidatePassword);
-//   console.log("Mot de passe hashé:", this.password);
-//   return await bcrypt.compare(candidatePassword, this.password);
-// };
 
 export const User = mongoose.model<IUser>("User", UserSchema);
 
@@ -463,30 +381,3 @@ export const CommandeSchema = new Schema<ICommande>(
 );
 
 export const Commande = mongoose.model<ICommande>("Commande", CommandeSchema);
-
-
-
-
-UserSchema.pre<IUser>("save", async function (next) {
-  // Pourquoi: garantir hash si password défini/modifié
-  if (!this.isModified("password") || !this.password) return next();
-  const salt = await bcrypt.genSalt(12);
-  this.password = await bcrypt.hash(this.password, salt);
-  next();
-});
-// UserSchema.methods.comparePassword = async function (candidate: string) {
-//   if (!this.password) return false;
-//   return bcrypt.compare(candidate, this.password);
-// };
-
-
-UserSchema.methods.comparePassword = async function (candidate: string) {
-  if (!this.password) return false;
-  return bcrypt.compare(candidate, this.password);
-};
-
-UserSchema.methods.bumpTokenVersion = async function () {
-  // Invalide tous les JWT existants (payload.ver)
-  this.tokenVersion += 1;
-  await this.save();
-};
