@@ -1,5 +1,5 @@
-// Controllers/mouvementStockController.ts
-import { Request, Response } from "express";
+// file: src/controllers/mouvementStockController.ts
+import type { Request, Response, RequestHandler } from "express";
 import mongoose, { PipelineStage } from "mongoose";
 import {
   Commande,
@@ -9,188 +9,15 @@ import {
   Produit,
 } from "../Models/model";
 
+/* ------------------------------ Utils locaux ------------------------------ */
 const toObjectId = (v: string) => new mongoose.Types.ObjectId(String(v));
 
-// --- helpers locaux (remplacent ../lib/utils) ---
 const toBool = (v: unknown, fallback = false): boolean => {
   if (v === undefined || v === null) return fallback;
   if (typeof v === "boolean") return v;
   if (typeof v === "number") return v !== 0;
   const s = String(v).trim().toLowerCase();
   return ["1", "true", "yes", "on"].includes(s);
-};
-
-// Autorisation minimale: SuperAdmin ok, AdminRegion limité à sa région
-async function assertCanAccessRegion(
-  req: any,
-  regionId: string,
-): Promise<void> {
-  const user = req?.user;
-  if (!user) throw Object.assign(new Error("Non authentifié"), { status: 401 });
-  const role = user.role;
-  if (role === "SuperAdmin") return;
-
-  // extrait l'id de région depuis l'objet ou la chaîne
-  const userRegionId: string | undefined =
-    typeof user.region === "string" ? user.region : user?.region?._id;
-
-  if (
-    role === "AdminRegion" &&
-    userRegionId &&
-    String(userRegionId) === String(regionId)
-  )
-    return;
-  throw Object.assign(new Error("Accès refusé à cette région"), {
-    status: 403,
-  });
-}
-
-// GET /mouvements/page
-export const getAllMouvementsStockPage = async (
-  req: AuthedRequest,
-  res: Response,
-) => {
-  try {
-    const page = parseIntSafe(req.query.page, 1);
-    const limit = parseIntSafe(req.query.limit, 10);
-    const skip = (page - 1) * limit;
-
-    const sortBy = (req.query.sortBy as string) || "createdAt";
-    const order = sortDir(req.query.order as string);
-    const q = (req.query.q as string) || "";
-
-    // 1) portée + filtres de base
-    const scope = buildScope(req);
-    const baseMatch = applyBusinessFilters(scope, req);
-
-    // 1.b) si on filtre par région (et pas de PV explicite), étendre en (region == X) OU (pointVente ∈ PVs(region X))
-    const onlyRegion = toBool(req.query.onlyRegion, false); // permet de forcer le comportement strict si besoin
-    let match = { ...baseMatch } as any;
-
-    if (match.region && !match.pointVente && !onlyRegion) {
-      const regionOID = toId(match.region);
-      if (regionOID) {
-        // récupérer tous les PV attachés à cette région
-        const pvIds = (await PointVente.distinct("_id", { region: regionOID }))
-          .map((id: any) => toId(id))
-          .filter(Boolean);
-
-        // retirer la contrainte top-level `region` pour la remplacer par un $or
-        const { region, ...rest } = match;
-        const or: any[] = [{ region: regionOID }];
-        if (pvIds.length) or.push({ pointVente: { $in: pvIds } });
-        match = { ...rest, $or: or };
-      }
-    }
-
-    // 2) stratégie
-    if (mustUseAggregate(sortBy, q)) {
-      const pipeline = buildAggregatePipeline(match, {
-        q,
-        sortBy,
-        order,
-        skip,
-        limit,
-      });
-      const result = await MouvementStock.aggregate(pipeline);
-      const data = result?.[0]?.data ?? [];
-      const total = (result?.[0]?.metadata?.[0]?.total as number) ?? 0;
-      sendPaged(res, { total, page, limit, mouvements: data });
-      return;
-    }
-
-    // 3) find() + populate
-    const total = await MouvementStock.countDocuments(match);
-    const mouvements = await populateAll(
-      MouvementStock.find(match)
-        .sort({ [sortBy]: order })
-        .skip(skip)
-        .limit(limit),
-    );
-
-    sendPaged(res, { total, page, limit, mouvements });
-    return;
-  } catch (err: any) {
-    const status = err?.status ?? 500;
-    res
-      .status(status)
-      .json({ message: "Erreur interne", error: err?.message ?? err });
-    return;
-  }
-};
-
-/* --------------------------- LISTE NON PAGINÉE ---------------------------- */
-/* ⚠️ Déconseillé. On redirige vers la version paginée pour éviter le “tout”. */
-export const getAllMouvementsStock = (req: AuthedRequest, res: Response) =>
-  getAllMouvementsStockPage(req, res);
-
-/* ------------------------------ PAR RÉGION ------------------------------- */
-// GET /mouvements/by-region/:regionId/page
-export const getMouvementStockByRegionPage = async (
-  req: AuthedRequest,
-  res: Response,
-) => {
-  try {
-    const { regionId } = req.params;
-    if (!regionId) return res.status(400).json({ message: "regionId requis" });
-
-    // Sécurité d’accès
-    await assertCanAccessRegion(req, regionId);
-
-    // proxy vers global avec filter region
-    (req.query as any).region = regionId;
-    getAllMouvementsStockPage(req, res);
-    return;
-  } catch (err: any) {
-    const status = err?.status ?? 500;
-    res.status(status).json({ message: err?.message ?? "Erreur interne" });
-    return;
-  }
-};
-
-/* --------------------------- PAR POINT DE VENTE --------------------------- */
-// GET /mouvements/by-point-vente/:pointVenteId/page
-export const getMouvementsStockByPointVentePage = async (
-  req: AuthedRequest,
-  res: Response,
-) => {
-  try {
-    const { pointVenteId } = req.params;
-    if (!pointVenteId)
-      return res.status(400).json({ message: "pointVenteId requis" });
-
-    // Sécurité d’accès
-    await assertCanAccessPointVente(req, pointVenteId);
-
-    // proxy vers global avec filter pointVente
-    (req.query as any).pointVente = pointVenteId;
-    getAllMouvementsStockPage(req, res);
-    return;
-  } catch (err: any) {
-    const status = err?.status ?? 500;
-    res.status(status).json({ message: err?.message ?? "Erreur interne" });
-    return;
-  }
-};
-
-/* --------------------------- AGRÉGATIONS (OK) ----------------------------- */
-/* Tu peux laisser tes deux agrégations existantes ci-dessous.
-   Elles sont compatibles avec la logique de rôle si tu injectes la vérif d’accès
-   (cf. assertCanAccessRegion / assertCanAccessPointVente / assertCanAccessUser)
-   avant d’exécuter la pipeline, comme je l’ai fait sur les endpoints “by-*”. */
-
-//integration de la pagination
-
-/* -------------------------------------------------------------------------- */
-/*                                   Helpers                                  */
-/* -------------------------------------------------------------------------- */
-type AuthedRequest = Request & {
-  user?: {
-    _id?: string;
-    role?: string; // "SuperAdmin" | "AdminRegion" | "AdminPointVente" | "Vendeur" | "Logisticien"
-    pointVente?: string | { _id: string };
-    region?: string | { _id: string };
-  };
 };
 
 const toId = (v?: any) =>
@@ -210,24 +37,28 @@ const parseBool = (v: any) => {
 const sortDir = (order?: string) =>
   String(order).toLowerCase() === "asc" ? 1 : -1;
 
-const isSuperAdmin = (req: AuthedRequest) =>
-  String(req.user?.role ?? "").toLowerCase() === "superadmin";
+/* ------------------------------ Accès & scope ----------------------------- */
+const isSuperAdmin = (req: Request) =>
+  String((req.user as any)?.role ?? "").toLowerCase() === "superadmin";
 
-const getUserIds = (req: AuthedRequest) => ({
-  userId: toId(req.user?._id),
-  pvId: toId((req.user as any)?.pointVente),
-  rgId: toId((req.user as any)?.region),
-});
+const getUserIds = (req: Request) => {
+  const u = (req.user as any) ?? {};
+  return {
+    userId: toId(u?._id),
+    pvId: toId(u?.pointVente),
+    rgId: toId(u?.region),
+  };
+};
 
-/** Construit la clause de portée selon le rôle + query (priorité PV→Region→User). */
-function buildScope(req: AuthedRequest) {
+/** Construit la portée selon le rôle + query (priorité PV→Region→User). */
+function buildScope(req: Request) {
   const q: any = {};
   const { pvId, rgId, userId } = getUserIds(req);
 
   // Overrides de la query (uniquement si SuperAdmin)
-  const qPV = toId(req.query.pointVente);
-  const qRG = toId(req.query.region);
-  const qUS = toId(req.query.user);
+  const qPV = toId((req.query as any).pointVente);
+  const qRG = toId((req.query as any).region);
+  const qUS = toId((req.query as any).user);
 
   if (isSuperAdmin(req)) {
     if (qPV) q.pointVente = qPV;
@@ -248,21 +79,21 @@ function buildScope(req: AuthedRequest) {
 }
 
 /** Filtres fonctionnels additionnels. */
-function applyBusinessFilters(base: any, req: AuthedRequest) {
+function applyBusinessFilters(base: any, req: Request) {
   const out = { ...base };
-  if (req.query.produit) out.produit = toId(req.query.produit);
-  if (req.query.type) out.type = String(req.query.type);
-  const st = parseBool(req.query.statut);
+  if ((req.query as any).produit) out.produit = toId((req.query as any).produit);
+  if ((req.query as any).type) out.type = String((req.query as any).type);
+  const st = parseBool((req.query as any).statut);
   if (typeof st === "boolean") out.statut = st;
-  const depot = parseBool(req.query.depotCentral);
+  const depot = parseBool((req.query as any).depotCentral);
   if (typeof depot === "boolean") out.depotCentral = depot;
 
   // Date range (createdAt)
-  const dateFrom = req.query.dateFrom
-    ? new Date(String(req.query.dateFrom))
+  const dateFrom = (req.query as any).dateFrom
+    ? new Date(String((req.query as any).dateFrom))
     : undefined;
-  const dateTo = req.query.dateTo
-    ? new Date(String(req.query.dateTo))
+  const dateTo = (req.query as any).dateTo
+    ? new Date(String((req.query as any).dateTo))
     : undefined;
   if (dateFrom || dateTo) {
     out.createdAt = {};
@@ -295,12 +126,27 @@ function populateAll(q: any) {
 }
 
 /** Vérifie accès à une région pour non-SuperAdmin. */
+async function assertCanAccessRegion(req: Request, regionId: string): Promise<void> {
+  const user = (req as any)?.user;
+  if (!user) throw Object.assign(new Error("Non authentifié"), { status: 401 });
+  const role = user.role;
+  if (role === "SuperAdmin") return;
+
+  const userRegionId: string | undefined =
+    typeof user.region === "string" ? user.region : user?.region?._id;
+
+  if (
+    role === "AdminRegion" &&
+    userRegionId &&
+    String(userRegionId) === String(regionId)
+  )
+    return;
+
+  throw Object.assign(new Error("Accès refusé à cette région"), { status: 403 });
+}
 
 /** Vérifie accès à un PV pour non-SuperAdmin. */
-async function assertCanAccessPointVente(
-  req: AuthedRequest,
-  pointVenteId: string,
-) {
+async function assertCanAccessPointVente(req: Request, pointVenteId: string) {
   if (isSuperAdmin(req)) return;
   const userPV = toId((req.user as any)?.pointVente);
   const userRG = toId((req.user as any)?.region);
@@ -316,15 +162,15 @@ async function assertCanAccessPointVente(
 }
 
 /** Vérifie accès à un userId (soi-même si non-SuperAdmin). */
-async function assertCanAccessUser(req: AuthedRequest, targetUserId: string) {
+async function assertCanAccessUser(req: Request, targetUserId: string) {
   if (isSuperAdmin(req)) return;
-  const self = toId(req.user?._id);
+  const self = toId((req.user as any)?._id);
   if (!self || String(self) !== String(toId(targetUserId))) {
     throw { status: 403, message: "Accès utilisateur refusé." };
   }
 }
 
-/** Aggregate obligatoire si tri sur champ imbriqué ou recherche q. */
+/** Aggregate obligatoire si tri nested ou recherche q. */
 function mustUseAggregate(sortBy?: string, q?: string) {
   return Boolean(q) || (sortBy && sortBy.includes("."));
 }
@@ -445,15 +291,116 @@ function sendPaged(
   });
 }
 
-/* -------------------------------------------------------------------------- */
-/*                                   ROUTES                                   */
-
-export const getMouvementStockById = async (
-  req: AuthedRequest,
-  res: Response,
-): Promise<void> => {
+/* ------------------- Impl interne réutilisable (VOID) -------------------- */
+async function handleAllMouvementsStockPage(req: Request, res: Response): Promise<void> {
   try {
-    const { id } = req.params;
+    const page = parseIntSafe((req.query as any).page, 1);
+    const limit = parseIntSafe((req.query as any).limit, 10);
+    const skip = (page - 1) * limit;
+
+    const sortBy = ((req.query as any).sortBy as string) || "createdAt";
+    const order = sortDir((req.query as any).order as string);
+    const q = ((req.query as any).q as string) || "";
+
+    // 1) portée + filtres de base
+    const scope = buildScope(req);
+    const baseMatch = applyBusinessFilters(scope, req);
+
+    // 1.b) si on filtre par région (sans PV explicite), étendre en OR(region || PV∈region)
+    const onlyRegion = toBool((req.query as any).onlyRegion, false);
+    let match = { ...baseMatch } as any;
+
+    if (match.region && !match.pointVente && !onlyRegion) {
+      const regionOID = toId(match.region);
+      if (regionOID) {
+        const pvIds = (await PointVente.distinct("_id", { region: regionOID }))
+          .map((id: any) => toId(id))
+          .filter(Boolean);
+
+        const { region, ...rest } = match;
+        const or: any[] = [{ region: regionOID }];
+        if (pvIds.length) or.push({ pointVente: { $in: pvIds } });
+        match = { ...rest, $or: or };
+      }
+    }
+
+    // 2) stratégie
+    if (mustUseAggregate(sortBy, q)) {
+      const pipeline = buildAggregatePipeline(match, {
+        q,
+        sortBy,
+        order,
+        skip,
+        limit,
+      });
+      const result = await MouvementStock.aggregate(pipeline);
+      const data = result?.[0]?.data ?? [];
+      const total = (result?.[0]?.metadata?.[0]?.total as number) ?? 0;
+      sendPaged(res, { total, page, limit, mouvements: data });
+      return;
+    }
+
+    // 3) find() + populate
+    const total = await MouvementStock.countDocuments(match);
+    const mouvements = await populateAll(
+      MouvementStock.find(match).sort({ [sortBy]: order }).skip(skip).limit(limit),
+    );
+
+    sendPaged(res, { total, page, limit, mouvements });
+  } catch (err: any) {
+    const status = err?.status ?? 500;
+    res.status(status).json({ message: "Erreur interne", error: err?.message ?? err });
+  }
+}
+
+/* --------------------------------- Routes --------------------------------- */
+// GET /mouvements/page
+export const getAllMouvementsStockPage: RequestHandler = async (req, res) => {
+  await handleAllMouvementsStockPage(req, res);
+};
+
+// LISTE NON PAGINÉE → redirige vers la version paginée
+export const getAllMouvementsStock: RequestHandler = async (req, res) => {
+  await handleAllMouvementsStockPage(req, res);
+};
+
+// GET /mouvements/by-region/:regionId/page
+export const getMouvementStockByRegionPage: RequestHandler = async (req, res) => {
+  try {
+    const { regionId } = req.params as { regionId?: string };
+    if (!regionId) {
+      res.status(400).json({ message: "regionId requis" });
+      return;
+    }
+    await assertCanAccessRegion(req, regionId);
+    (req.query as any).region = regionId;
+    await handleAllMouvementsStockPage(req, res);
+  } catch (err: any) {
+    const status = err?.status ?? 500;
+    res.status(status).json({ message: err?.message ?? "Erreur interne" });
+  }
+};
+
+// GET /mouvements/by-point-vente/:pointVenteId/page
+export const getMouvementsStockByPointVentePage: RequestHandler = async (req, res) => {
+  try {
+    const { pointVenteId } = req.params as { pointVenteId?: string };
+    if (!pointVenteId) {
+      res.status(400).json({ message: "pointVenteId requis" });
+      return;
+    }
+    await assertCanAccessPointVente(req, pointVenteId);
+    (req.query as any).pointVente = pointVenteId;
+    await handleAllMouvementsStockPage(req, res);
+  } catch (err: any) {
+    const status = err?.status ?? 500;
+    res.status(status).json({ message: err?.message ?? "Erreur interne" });
+  }
+};
+
+export const getMouvementStockById: RequestHandler = async (req, res) => {
+  try {
+    const { id } = req.params as { id?: string };
     const mv: any = await populateAll(MouvementStock.findById(id));
     if (!mv) {
       res.status(404).json({ message: "Mouvement non trouvé" });
@@ -465,8 +412,7 @@ export const getMouvementStockById = async (
     if (
       !isSuperAdmin(req) &&
       !(
-        (scope.pointVente &&
-          String(scope.pointVente) === String(mv.pointVente?._id)) ||
+        (scope.pointVente && String(scope.pointVente) === String(mv.pointVente?._id)) ||
         (scope.region && String(scope.region) === String(mv.region?._id)) ||
         (scope.user && String(scope.user) === String(mv.user?._id))
       )
@@ -476,72 +422,47 @@ export const getMouvementStockById = async (
     }
 
     res.json(mv);
-    return;
   } catch (err) {
     res.status(500).json({ message: "Erreur interne", error: err });
-    return;
   }
 };
 
-/* --------------------------- PAR POINT DE VENTE --------------------------- */
-// GET "/by-point-vente/:pointVenteId"  (legacy non paginé → on renvoie paginé qd même)
-export const getMouvementsStockByPointVente = async (
-  req: AuthedRequest,
-  res: Response,
-): Promise<void> => {
+// GET "/by-point-vente/:pointVenteId" (legacy non paginé → renvoie paginé)
+export const getMouvementsStockByPointVente: RequestHandler = async (req, res) => {
   try {
-    const { pointVenteId } = req.params;
+    const { pointVenteId } = req.params as { pointVenteId?: string };
     if (!pointVenteId) {
       res.status(400).json({ message: "ID requis" });
       return;
     }
     await assertCanAccessPointVente(req, pointVenteId);
-
     (req.query as any).pointVente = pointVenteId;
-    await getAllMouvementsStock(req, res);
-    return;
+    await handleAllMouvementsStockPage(req, res);
   } catch (err: any) {
-    res
-      .status(err?.status ?? 500)
-      .json({ message: err?.message ?? "Erreur interne" });
-    return;
+    res.status(err?.status ?? 500).json({ message: err?.message ?? "Erreur interne" });
   }
 };
 
-// GET "/by-point-vente/page/:pointVenteId" (paginé)
-export const getMouvementsStockByPointVenteId = async (
-  req: AuthedRequest,
-  res: Response,
-): Promise<void> => {
+// GET "/by-point-vente/page/:pointVenteId"
+export const getMouvementsStockByPointVenteId: RequestHandler = async (req, res) => {
   try {
-    const { pointVenteId } = req.params;
+    const { pointVenteId } = req.params as { pointVenteId?: string };
     if (!pointVenteId) {
       res.status(400).json({ message: "ID requis" });
       return;
     }
     await assertCanAccessPointVente(req, pointVenteId);
-
     (req.query as any).pointVente = pointVenteId;
-    await getAllMouvementsStock(req, res);
-    return;
+    await handleAllMouvementsStockPage(req, res);
   } catch (err: any) {
-    res
-      .status(err?.status ?? 500)
-      .json({ message: err?.message ?? "Erreur interne" });
-    return;
+    res.status(err?.status ?? 500).json({ message: err?.message ?? "Erreur interne" });
   }
 };
 
-/* ----------------------------------- RÉGION -------------------------------- */
 // GET "/region/:regionId"
-// petit helper pour parser les bools depuis la query
-
-export const getMouvementStockByRegion = async (
-  req: AuthedRequest,
-  res: Response,
-): Promise<void> => {
+export const getMouvementStockByRegion: RequestHandler = async (req, res) => {
   try {
-    const { regionId } = req.params as { regionId: string };
+    const { regionId } = req.params as { regionId?: string };
     if (!regionId || !mongoose.isValidObjectId(regionId)) {
       res.status(400).json({ message: "regionId requis ou invalide" });
       return;
@@ -553,54 +474,47 @@ export const getMouvementStockByRegion = async (
     await assertCanAccessRegion(req, regionId);
 
     // pagination & tri
-    const page = Math.max(parseInt(String(req.query.page ?? "1"), 10) || 1, 1);
+    const page = Math.max(parseInt(String((req.query as any).page ?? "1"), 10) || 1, 1);
     const limit = Math.min(
-      Math.max(parseInt(String(req.query.limit ?? "20"), 10) || 20, 1),
+      Math.max(parseInt(String((req.query as any).limit ?? "20"), 10) || 20, 1),
       200,
     );
     const skip = (page - 1) * limit;
 
-    const sortBy = (req.query.sortBy as string) || "createdAt";
+    const sortBy = ((req.query as any).sortBy as string) || "createdAt";
     const order =
-      ((req.query.order as string) || "desc").toLowerCase() === "asc" ? 1 : -1;
+      (((req.query as any).order as string) || "desc").toLowerCase() === "asc" ? 1 : -1;
 
-    const includeRefs = toBool(req.query.includeRefs, true);
-    const includeTotal = toBool(req.query.includeTotal, false);
+    const includeRefs = toBool((req.query as any).includeRefs, true);
+    const includeTotal = toBool((req.query as any).includeTotal, false);
 
     // base filters (NE PAS inclure region/pointVente ici)
     const baseFilter: Record<string, any> = {};
-    if (req.query.type) baseFilter.type = req.query.type;
-    if (req.query.produit) {
-      const pid = String(req.query.produit);
+    if ((req.query as any).type) baseFilter.type = (req.query as any).type;
+    if ((req.query as any).produit) {
+      const pid = String((req.query as any).produit);
       if (mongoose.isValidObjectId(pid)) baseFilter.produit = toObjectId(pid);
     }
     const createdAt: any = {};
-    if (req.query.dateFrom)
-      createdAt.$gte = new Date(String(req.query.dateFrom));
-    if (req.query.dateTo) createdAt.$lte = new Date(String(req.query.dateTo));
+    if ((req.query as any).dateFrom) createdAt.$gte = new Date(String((req.query as any).dateFrom));
+    if ((req.query as any).dateTo) createdAt.$lte = new Date(String((req.query as any).dateTo));
     if (Object.keys(createdAt).length) baseFilter.createdAt = createdAt;
 
-    // Récupère les PV de la région (cast explicite => évite les non-matchs)
+    // Récupère les PV de la région
     const rawPvIds = await PointVente.distinct("_id", { region: regionOID });
     const pvIds: mongoose.Types.ObjectId[] = rawPvIds.map((id: any) =>
       toObjectId(String(id)),
     );
 
-    // Filtre final: mouvements de la région OU des PV appartenant à la région
+    // Filtre final
     const regionOrPVFilter: Record<string, any> = {
-      $or: [
-        { region: regionOID },
-        ...(pvIds.length ? [{ pointVente: { $in: pvIds } }] : []), // évite $in: []
-      ],
+      $or: [{ region: regionOID }, ...(pvIds.length ? [{ pointVente: { $in: pvIds } }] : [])],
     };
 
-    // filtre optionnel sur un PV précis (si fourni dans la query)
+    // filtre optionnel PV précis
     let pvMatchClause: Record<string, any> = {};
-    if (
-      req.query.pointVente &&
-      mongoose.isValidObjectId(String(req.query.pointVente))
-    ) {
-      pvMatchClause = { pointVente: toObjectId(String(req.query.pointVente)) };
+    if ((req.query as any).pointVente && mongoose.isValidObjectId(String((req.query as any).pointVente))) {
+      pvMatchClause = { pointVente: toObjectId(String((req.query as any).pointVente)) };
     }
 
     const finalFilter = { $and: [baseFilter, regionOrPVFilter, pvMatchClause] };
@@ -627,9 +541,7 @@ export const getMouvementStockByRegion = async (
     }
 
     const execList = query.exec();
-    const execCount = includeTotal
-      ? MouvementStock.countDocuments(finalFilter)
-      : null;
+    const execCount = includeTotal ? MouvementStock.countDocuments(finalFilter) : null;
 
     const [items, total] = await Promise.all([execList, execCount]);
 
@@ -646,46 +558,30 @@ export const getMouvementStockByRegion = async (
     }
 
     res.json(items);
-    return;
   } catch (err: any) {
-    res
-      .status(err?.status ?? 500)
-      .json({ message: err?.message ?? "Erreur interne" });
-    return;
+    res.status(err?.status ?? 500).json({ message: err?.message ?? "Erreur interne" });
   }
 };
 
-/* ----------------------------------- USER --------------------------------- */
 // GET "/byUser/:userId"
-export const getMouvementsStockByUserId = async (
-  req: AuthedRequest,
-  res: Response,
-): Promise<void> => {
+export const getMouvementsStockByUserId: RequestHandler = async (req, res) => {
   try {
-    const { userId } = req.params;
+    const { userId } = req.params as { userId?: string };
     if (!userId) {
       res.status(400).json({ message: "ID utilisateur requis" });
       return;
     }
     await assertCanAccessUser(req, userId);
-
     (req.query as any).user = userId;
-    await getAllMouvementsStock(req, res);
-    return;
+    await handleAllMouvementsStockPage(req, res);
   } catch (err: any) {
-    res
-      .status(err?.status ?? 500)
-      .json({ message: err?.message ?? "Erreur interne" });
-    return;
+    res.status(err?.status ?? 500).json({ message: err?.message ?? "Erreur interne" });
   }
 };
 
 /* ----------------------------- CREATE / UPDATE ---------------------------- */
 // POST "/"
-export const createMouvementStock = async (
-  req: AuthedRequest,
-  res: Response,
-): Promise<void> => {
+export const createMouvementStock: RequestHandler = async (req, res) => {
   try {
     const {
       pointVente,
@@ -697,7 +593,7 @@ export const createMouvementStock = async (
       statut,
       region,
       user,
-    } = req.body;
+    } = req.body as any;
 
     const hasPV = !!pointVente;
     const hasRG = !!region;
@@ -729,23 +625,18 @@ export const createMouvementStock = async (
     const mouvement = await new MouvementStock(mouvementData).save();
     const populated = await populateAll(MouvementStock.findById(mouvement._id));
     res.status(201).json(populated);
-    return;
   } catch (err: any) {
     res.status(400).json({
       message: "Erreur lors de la création",
       error: err?.message ?? err,
     });
-    return;
   }
 };
 
 // PUT "/:id"
-export const updateMouvementStock = async (
-  req: AuthedRequest,
-  res: Response,
-): Promise<void> => {
+export const updateMouvementStock: RequestHandler = async (req, res) => {
   try {
-    const { id } = req.params;
+    const { id } = req.params as { id?: string };
     const {
       pointVente,
       depotCentral,
@@ -756,7 +647,7 @@ export const updateMouvementStock = async (
       statut,
       region,
       user,
-    } = req.body;
+    } = req.body as any;
 
     const hasPV = !!pointVente;
     const hasRG = !!region;
@@ -793,39 +684,29 @@ export const updateMouvementStock = async (
       return;
     }
     res.json(updated);
-    return;
   } catch (err: any) {
     res.status(400).json({
       message: "Erreur lors de la mise à jour",
       error: err?.message ?? err,
     });
-    return;
   }
 };
 
 // DELETE "/:id"
-export const deleteMouvementStock = async (
-  req: AuthedRequest,
-  res: Response,
-): Promise<void> => {
+export const deleteMouvementStock: RequestHandler = async (req, res) => {
   try {
-    const { id } = req.params;
+    const { id } = req.params as { id?: string };
     await MouvementStock.findByIdAndDelete(id);
     res.json({ message: "Mouvement supprimé avec succès" });
-    return;
   } catch (err) {
     res.status(500).json({ message: "Erreur interne", error: err });
-    return;
   }
 };
 
 // PUT "/validate/:id"
-export const validateState = async (
-  req: AuthedRequest,
-  res: Response,
-): Promise<void> => {
+export const validateState: RequestHandler = async (req, res) => {
   try {
-    const { id } = req.params;
+    const { id } = req.params as { id?: string };
     const mouvement = await populateAll(
       MouvementStock.findByIdAndUpdate(id, { statut: true }, { new: true }),
     );
@@ -834,25 +715,18 @@ export const validateState = async (
       return;
     }
     res.json({ message: "Statut du mouvement mis à jour", mouvement });
-    return;
   } catch (err) {
-    res
-      .status(500)
-      .json({ message: "Erreur lors de la validation", error: err });
-    return;
+    res.status(500).json({ message: "Erreur lors de la validation", error: err });
   }
 };
 
-/* --------------------------- AGRÉGATIONS (OK) ----------------------------- */
+/* --------------------------- Agrégations (OK) ----------------------------- */
 // GET "/byUser/aggregate/:userId"
-export const getMouvementsStockAggregatedByUserId = async (
-  req: AuthedRequest,
-  res: Response,
-): Promise<void> => {
+export const getMouvementsStockAggregatedByUserId: RequestHandler = async (req, res) => {
   try {
-    const { userId } = req.params;
-    const page = parseIntSafe(req.query.page, 1);
-    const limit = parseIntSafe(req.query.limit, 10);
+    const { userId } = req.params as { userId?: string };
+    const page = parseIntSafe((req.query as any).page, 1);
+    const limit = parseIntSafe((req.query as any).limit, 10);
     const skip = (page - 1) * limit;
 
     if (!userId) {
@@ -894,9 +768,7 @@ export const getMouvementsStockAggregatedByUserId = async (
     const total = metadata.length > 0 ? metadata[0].total : 0;
 
     if (!data.length) {
-      res
-        .status(404)
-        .json({ message: "Aucun mouvement trouvé pour cet utilisateur" });
+      res.status(404).json({ message: "Aucun mouvement trouvé pour cet utilisateur" });
       return;
     }
 
@@ -923,22 +795,17 @@ export const getMouvementsStockAggregatedByUserId = async (
       limit,
       mouvements: sortedData,
     });
-    return;
   } catch (err) {
     res.status(500).json({ message: "Erreur interne", error: err });
-    return;
   }
 };
 
 // GET "/by-point-vente/aggregate/:pointVenteId"
-export const getMouvementsStockAggregatedByPointVente = async (
-  req: AuthedRequest,
-  res: Response,
-): Promise<void> => {
+export const getMouvementsStockAggregatedByPointVente: RequestHandler = async (req, res) => {
   try {
-    const { pointVenteId } = req.params;
-    const page = parseIntSafe(req.query.page, 1);
-    const limit = parseIntSafe(req.query.limit, 10);
+    const { pointVenteId } = req.params as { pointVenteId?: string };
+    const page = parseIntSafe((req.query as any).page, 1);
+    const limit = parseIntSafe((req.query as any).limit, 10);
     const skip = (page - 1) * limit;
 
     if (!pointVenteId) {
@@ -1018,19 +885,13 @@ export const getMouvementsStockAggregatedByPointVente = async (
       limit,
       mouvements: data,
     });
-    return;
   } catch (err) {
     res.status(500).json({ message: "Erreur interne", error: err });
-    return;
   }
 };
 
 /* ------------------------------ Livraison --------------------------------- */
-// POST Livraison (utilisé par une autre route si besoin)
-export const livrerProduitCommande = async (
-  req: Request,
-  res: Response,
-): Promise<void> => {
+export const livrerProduitCommande: RequestHandler = async (req, res) => {
   try {
     const {
       commandeId,
@@ -1041,7 +902,7 @@ export const livrerProduitCommande = async (
       pointVente,
       region,
       depotCentral,
-    } = req.body;
+    } = req.body as any;
 
     if (!commandeId || !produit || !quantite || !montant || !user) {
       res.status(400).json({
@@ -1113,9 +974,7 @@ export const livrerProduitCommande = async (
     await produitCommande.save();
 
     // Vérification globale de la commande
-    const produitsCommande = await CommandeProduit.find({
-      commande: commandeId,
-    });
+    const produitsCommande = await CommandeProduit.find({ commande: commandeId });
     const tousLivres = produitsCommande.every((p) => p.statut === "livré");
     if (tousLivres) {
       commande.statut = "livrée";
@@ -1136,12 +995,10 @@ export const livrerProduitCommande = async (
       message: "Produit livré avec succès.",
       livraison: populatedMouvement,
     });
-    return;
   } catch (err) {
     res.status(400).json({
       message: "Erreur lors de la livraison du produit",
       error: (err as Error).message,
     });
-    return;
   }
 };

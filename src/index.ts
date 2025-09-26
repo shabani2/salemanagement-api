@@ -1,8 +1,9 @@
+import dotenv from "dotenv";
 import { errorHandler, notFound } from "./Middlewares/errorHandler";
 import cors from "cors";
 import express from "express";
-import dotenv from "dotenv";
 import bodyParser from "body-parser";
+import "./Utils/emailService";
 import { connectDB } from "./config/dbConnection";
 import AuthRoutes from "./Routes/authRoutes";
 import usersRouter from "./Routes/userRoutes";
@@ -115,8 +116,8 @@ app.use(errorHandler);
 
 // 🔥 Lancement du serveur
 const Port = process.env.PORT || 8000;
-app.listen(Port, () => console.log(`🚀 Server is running on port ${Port}`));
+app.listen(Port, () => console.log(`Server is running on port ${Port}`));
 app.use(morgan("dev"));
-console.log("🚀 Express app initialisée");
+console.log(" Express app initialisée");
 
 export default app;

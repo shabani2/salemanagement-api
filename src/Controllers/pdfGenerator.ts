@@ -144,7 +144,8 @@ export const generateStockPdf = async (req: Request, res: Response) => {
     const datePart = format(new Date(), "yyMMdd");
     const seriePart = /^\d+$/.test(serie)
       ? serie.slice(-4).padStart(4, "0")
-      : String(user?.id || "0000")
+      //@ts-ignore
+      : String(user?._id || "0000")
           .slice(-4)
           .padStart(4, "0");
     const numeroDocument = `${datePart}${seriePart}`;
@@ -289,7 +290,8 @@ export const generateStockPdf = async (req: Request, res: Response) => {
     kvLine(
       doc,
       "Utilisateur",
-      String(user?.nom || user?.id || "—"),
+      //@ts-ignore
+      String(user?.nom || user?._id || "—"),
       x0,
       pageWidth,
       { font: "Helvetica", fontSize: FS.body },

@@ -2,19 +2,28 @@ import mongoose from "mongoose";
 import { UserRoleType } from "./model";
 
 // Modèle Utilisateur
+
 export interface IUser extends Document {
-  id?: string;
+ 
   nom: string;
   prenom: string;
   telephone: string;
   email: string;
   adresse: string;
-  password: string;
+  password?: string;
   role: UserRoleType;
   image?: string;
   pointVente?: mongoose.Types.ObjectId;
   region?: mongoose.Types.ObjectId;
-  comparePassword(plainText: string): Promise<boolean>;
+  firstConnection: boolean;
+  emailVerified: boolean;
+  isActive: boolean;
+  tokenVersion: number;
+  emailVerifyTokenHash?: string | null;
+  emailVerifyTokenExpires?: Date | null;
+  resetPasswordTokenHash?: string | null;
+  resetPasswordTokenExpires?: Date | null;
+  comparePassword(candidate: string): Promise<boolean>;
 }
 
 // Modèle Organisation

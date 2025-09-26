@@ -1,28 +1,37 @@
-import { Request, Response, NextFunction } from "express";
+// file: src/Middlewares/authenticate.ts
+import type { RequestHandler } from "express";
+
+import { User } from "../Models/model";
 import { verifyToken } from "../Utils/jwt";
 
-export interface AuthenticatedRequest extends Request {
-  user?: any; // Typage plus strict recommandé (ex: `user?: { id: string, role: string }`)
-}
-
-export const authenticate = (
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction,
-): void => {
-  const token = req.header("Authorization")?.split(" ")[1];
-  console.log("token : ", token);
-  if (!token) {
-    res.status(401).json({ message: "Accès refusé, token manquant" });
-    return; // 🔹 Assure que la fonction retourne bien `void`
-  }
-
+// Pourquoi: `RequestHandler` → Promise<void>, pas de retour de Response
+export const authenticate: RequestHandler = async (req, res, next) => {
   try {
-    const decoded = verifyToken(token);
-    req.user = decoded;
-    next(); // 🔹 Correct, car il retourne bien `void`
-  } catch (err) {
-    res.status(403).json({ message: "Token invalide" });
-    return; // 🔹 Ajouté pour éviter l'erreur de type
+    const auth = req.headers.authorization ?? "";
+    if (!auth.startsWith("Bearer ")) {
+      res.status(401).json({ message: "Token manquant" });
+      return;
+    }
+    const token = auth.slice(7).trim();
+    const payload = verifyToken(token);
+
+    const user = await User.findById(payload.sub);
+    if (!user) {
+      res.status(401).json({ message: "Utilisateur inexistant" });
+      return;
+    }
+    if (user.isActive === false) {
+      res.status(403).json({ message: "Compte désactivé" });
+      return;
+    }
+    if (payload.ver !== user.tokenVersion) {
+      res.status(401).json({ message: "Session invalide" });
+      return;
+    }
+
+    req.user = user;
+    next();
+  } catch {
+    res.status(401).json({ message: "Token invalide" });
   }
 };
