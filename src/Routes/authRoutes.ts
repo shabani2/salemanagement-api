@@ -1,5 +1,5 @@
 import express from "express";
-import { forgotPassword, login, logout, register, resetPassword, verifyEmail } from "../Controllers/authController";
+import { forgotPassword, login, logout, register, resetPassword, updatePassword, verifyEmail } from "../Controllers/authController";
 import { upload } from "../Middlewares/upload";
 
 const AuthRoutes = express.Router();
@@ -12,6 +12,7 @@ AuthRoutes.get("/verify-email", verifyEmail);
 AuthRoutes.post("/login", login);
 AuthRoutes.post("/forgot-password", forgotPassword);
 AuthRoutes.post("/reset-password", resetPassword);
+AuthRoutes.post('/update-password', updatePassword);
 
 AuthRoutes.post("/register", upload.single("image"), register);
 

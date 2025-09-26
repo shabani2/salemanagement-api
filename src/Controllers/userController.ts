@@ -1,10 +1,14 @@
 // file: src/controllers/user.controller.ts
 import type { RequestHandler } from "express";
 import { Types } from "mongoose";
-import { User } from "../Models/model";
+import { User, UserRoleType } from "../Models/model";
 import { uploadFile } from "../services/uploadService";
 import { MulterRequest } from "../Models/multerType";
+import { IUser } from "../Models/interfaceModels";
+import { USER_ROLES } from "../Utils/constant";
 
+
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /** Liste paginée/filtrée des utilisateurs */
 export const getAllUsers: RequestHandler = async (req, res) => {
   try {
@@ -184,85 +188,229 @@ export const deleteUser: RequestHandler = async (req, res) => {
   }
 };
 
+
+export const createUser: RequestHandler = async (req, res) => {
+    const mreq = req as MulterRequest;
+
+    try {
+        const {
+            nom,
+            prenom,
+            telephone,
+            email,
+            adresse,
+            role,
+            region,
+            pointVente,
+            password,
+        } = mreq.body;
+
+        // ------------------------------------------
+        // 1. Validations minimales (Email, Password)
+        // ------------------------------------------
+        if (!emailRegex.test(email)) {
+            res.status(400).json({ message: "Email invalide." });
+            return;
+        }
+
+        if (!password || password.length < 6) {
+            res.status(400).json({ message: "Mot de passe requis (min 6 caractères)." });
+            return;
+        }
+
+        // ------------------------------------------
+        // 2. Unicité email/téléphone
+        // ------------------------------------------
+        const existingUser = await User.findOne({ $or: [{ email }, { telephone }] });
+        if (existingUser) {
+            res.status(400).json({ message: "Email ou téléphone déjà utilisé." });
+            return;
+        }
+
+        // ------------------------------------------
+        // 3. Image (optionnel)
+        // ------------------------------------------
+        let imagePath = "";
+        if (mreq.file) {
+            try {
+                imagePath = await uploadFile(mreq.file, role);
+            } catch (uploadError) {
+                res.status(500).json({ message: "Échec de l'upload de l'image." });
+                return;
+            }
+        }
+
+        // ------------------------------------------
+        // 4. Règles de rôle
+        // ------------------------------------------
+        const onlyRegion: UserRoleType[] = ["AdminRegion"];
+        const needsPointVente: UserRoleType[] = ["AdminPointVente", "Vendeur", "Logisticien"];
+
+        if (!USER_ROLES.includes(role)) {
+            res.status(400).json({ message: `Rôle invalide : ${role}` });
+            return;
+        }
+
+        if (onlyRegion.includes(role) && !region) {
+            res.status(400).json({ message: "La région est requise pour un AdminRegion." });
+            return;
+        }
+
+        if (needsPointVente.includes(role) && !pointVente) {
+            res.status(400).json({ message: "Le point de vente est requis pour ce rôle." });
+            return;
+        }
+
+        // ------------------------------------------
+        // 5. Création de l'utilisateur
+        // ------------------------------------------
+        const userPayload: Partial<IUser> & { password: string } = {
+            nom,
+            prenom,
+            telephone,
+            email,
+            adresse,
+            role,
+            image: imagePath,
+            password,
+            firstConnection: false,
+            emailVerified: true,
+            isActive: true,
+        };
+
+        if (onlyRegion.includes(role)) {
+            (userPayload as any).region = region;
+        }
+
+        if (needsPointVente.includes(role)) {
+            (userPayload as any).pointVente = pointVente;
+        }
+
+        const user = await new User(userPayload).save();
+
+        // ------------------------------------------
+        // 6. Réponse de succès
+        // ------------------------------------------
+        const userResponse = user.toObject();
+        delete userResponse.password;
+
+        res.status(201).json({
+            message: `Compte ${user.email} créé avec succès.`,
+            user: userResponse,
+        });
+
+    } catch (err) {
+        console.error("createUser error:", err);
+        res.status(500).json({ message: "Erreur interne lors de la création de l'utilisateur." });
+    }
+};
+
 export const updateUser: RequestHandler = async (req, res) => {
-  const mreq = req as MulterRequest; // Pourquoi: accès au fichier uploadé
-  try {
-    const { _id, nom, prenom, email, adresse, telephone, role, pointVente, region } =
-      (mreq.body as any) ?? {};
+    const mreq = req as MulterRequest;
 
-    if (!_id || !Types.ObjectId.isValid(_id)) {
-      res.status(400).json({ message: "_id invalide" });
-      return;
+    try {
+        const {
+            _id,
+            nom,
+            prenom,
+            email,
+            adresse,
+            telephone,
+            role,
+            pointVente,
+            region,
+        } = mreq.body ?? {};
+
+        if (!_id || !Types.ObjectId.isValid(_id)) {
+            res.status(400).json({ message: "_id invalide" });
+            return;
+        }
+
+        const user = await User.findById(_id);
+        if (!user) {
+            res.status(404).json({ message: "Utilisateur non trouvé" });
+            return;
+        }
+
+        const updateFields: Record<string, any> = {};
+
+        if (nom) updateFields.nom = nom;
+        if (prenom) updateFields.prenom = prenom;
+        if (adresse) updateFields.adresse = adresse;
+        if (role) updateFields.role = role;
+        if (pointVente) updateFields.pointVente = pointVente;
+        if (region) updateFields.region = region;
+
+        // Gestion de l'image (si uploadé)
+        if (mreq.file) {
+            try {
+                const imagePath = await uploadFile(mreq.file, role || user.role);
+                updateFields.image = imagePath;
+            } catch {
+                res.status(500).json({ message: "Échec de l'upload de l'image" });
+                return;
+            }
+        }
+
+        // Vérification téléphone / email
+        if (telephone && telephone !== user.telephone) {
+            const existingUser = await User.findOne({
+                $or: [{ telephone }, { email: telephone }],
+            });
+            if (existingUser && String(existingUser._id) !== String(user._id)) {
+                res.status(400).json({ message: "Le numéro de téléphone ou l'email est déjà utilisé" });
+                return;
+            }
+
+            updateFields.telephone = telephone;
+
+            // Optionnel : tu avais un comportement où email = téléphone si téléphone change
+            updateFields.email = telephone;
+        }
+
+        if (email && email !== user.email) {
+            if (!emailRegex.test(email)) {
+                res.status(400).json({ message: "Email invalide" });
+                return;
+            }
+
+            const existingEmail = await User.findOne({ email });
+            if (existingEmail && String(existingEmail._id) !== String(user._id)) {
+                res.status(400).json({ message: "Cet email est déjà utilisé" });
+                return;
+            }
+
+            updateFields.email = email;
+        }
+
+        // Aucun champ à mettre à jour ?
+        if (Object.keys(updateFields).length === 0) {
+            res.status(200).json({ message: "Aucune modification effectuée." });
+            return;
+        }
+
+        const updatedUser = await User.findByIdAndUpdate(
+            _id,
+            { $set: updateFields },
+            { new: true, runValidators: true }
+        )
+            .populate("region")
+            .populate({
+                path: "pointVente",
+                populate: [{ path: "region" }, { path: "stock" }],
+            });
+
+        if (!updatedUser) {
+            res.status(500).json({ message: "Échec de la mise à jour de l'utilisateur" });
+            return;
+        }
+
+        res.json(updatedUser);
+    } catch (err) {
+        console.error("updateUser error:", err);
+        res.status(500).json({
+            message: "Erreur interne",
+            error: err instanceof Error ? err.message : String(err),
+        });
     }
-
-    const user = await User.findById(_id);
-    if (!user) {
-      res.status(404).json({ message: "Utilisateur non trouvé" });
-      return;
-    }
-
-    const updateFields: Record<string, any> = {};
-    if (nom) updateFields.nom = nom;
-    if (prenom) updateFields.prenom = prenom;
-    if (adresse) updateFields.adresse = adresse;
-    if (role) updateFields.role = role;
-    if (pointVente) updateFields.pointVente = pointVente;
-    if (region) updateFields.region = region;
-
-    if (mreq.file) {
-      try {
-        const imagePath = await uploadFile(mreq.file, role || user.role);
-        updateFields.image = imagePath;
-      } catch {
-        res.status(500).json({ message: "Échec de l'upload de l'image" });
-        return;
-      }
-    }
-
-    if (telephone && telephone !== user.telephone) {
-      const existingUser = await User.findOne({
-        $or: [{ telephone }, { email: telephone }],
-      });
-      if (existingUser && String(existingUser._id) !== String(user._id)) {
-        res.status(400).json({ message: "Le numéro de téléphone ou l'email est déjà utilisé" });
-        return;
-      }
-      updateFields.telephone = telephone;
-      updateFields.email = telephone;
-    }
-
-    if (email && email !== user.email) {
-      const existingEmail = await User.findOne({ email });
-      if (existingEmail && String(existingEmail._id) !== String(user._id)) {
-        res.status(400).json({ message: "Cet email est déjà utilisé" });
-        return;
-      }
-      updateFields.email = email;
-    }
-
-    if (Object.keys(updateFields).length === 0) {
-      res.status(200).json({ message: "Aucune modification effectuée." });
-      return;
-    }
-
-    const updatedUser = await User.findByIdAndUpdate(
-      _id,
-      { $set: updateFields },
-      { new: true, runValidators: true },
-    )
-      .populate("region")
-      .populate({ path: "pointVente", populate: [{ path: "region" }, { path: "stock" }] });
-
-    if (!updatedUser) {
-      res.status(500).json({ message: "Échec de la mise à jour de l'utilisateur" });
-      return;
-    }
-
-    res.json(updatedUser);
-  } catch (err) {
-    res.status(500).json({
-      message: "Erreur interne",
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
 };

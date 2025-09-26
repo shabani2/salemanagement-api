@@ -204,6 +204,56 @@ export const resetPassword: RequestHandler = async (req, res) => {
   }
 };
 
+
+export const updatePassword: RequestHandler = async (req, res) => {
+try {
+const { id, password } = req.body as { id?: string; password?: string };
+
+ if (!id || !password) {
+res.status(400).json({ message: "ID utilisateur ou mot de passe manquant." });
+return;
+}
+
+const user = await User.findById(id);
+
+ if (!user) {
+res.status(404).json({ message: "Utilisateur non trouvé." });
+return;
+ }
+    
+    // **✅ Déterminer si c'est la première connexion avant de changer le statut**
+    // C'est critique pour éviter de rompre les sessions existantes non liées
+    // à 'firstConnection', mais dans ce scénario, on suppose que cette route
+    // est surtout utilisée pour la première connexion.
+    // Pour éviter l'invalidation de la session en cours, on retire l'incrémentation.
+
+// 2. Mettre à jour le mot de passe et le drapeau firstConnection
+user.password = password; // Le hachage sera effectué par le hook 'pre-save' de Mongoose
+user.firstConnection = false;
+
+ // 3. ❌ RETIRER L'INCREMENTATION DU tokenVersion ICI
+// user.tokenVersion = (user.tokenVersion || 0) + 1; 
+
+// 4. Sauvegarder l'utilisateur
+ await user.save();
+
+// 5. Réponse de succès
+res.status(200).json({ message: "Mot de passe mis à jour avec succès." });
+} catch (error) {
+console.error("Erreur lors de la mise à jour du mot de passe:", error);
+ res.status(500).json({ message: "Erreur interne du serveur lors de la mise à jour du mot de passe." });
+ }
+};
+
+
+
+// authSlice.ts (ou là où sont vos thunks)
+
+// 💡 C'est un nouveau thunk qui prend l'ID de l'utilisateur connecté
+
+
+
+
 /* ---------------------------------- Login ---------------------------------- */
 export const login: RequestHandler = async (req, res) => {
   try {
