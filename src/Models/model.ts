@@ -14,14 +14,13 @@ import {
   IRegion,
   IStock,
   IUser,
-  IVente,
+  
 } from "./interfaceModels";
 import bcrypt from "bcryptjs";
 import {
-  adjustStock,
+  
   attachMouvementHooks,
-  computeLivraisonScopes,
-  computeOperationSource,
+ 
 } from "../Middlewares/operationHandler";
 
 export type UserRoleType = (typeof UserRole)[number];
@@ -183,64 +182,7 @@ const MouvementStockSchema = new Schema<IMouvementStock>(
 );
 
 // PRE-SAVE VALIDATION
-
-MouvementStockSchema.pre("save", async function (next) {
-  try {
-    const {
-      type,
-      statut,
-      produit,
-      quantite,
-      pointVente,
-      region,
-      depotCentral,
-    } = this as any;
-
-    // Entrée & Commande: pas de contrôle de dispo
-    if (type === "Entrée" || type === "Commande") return next();
-
-    // LIVRAISON: vérifier le stock de la *source* uniquement
-    if (type === "Livraison") {
-      const { source, reasonIfInvalid } = computeLivraisonScopes(this);
-      if (!source)
-        return next(new Error(reasonIfInvalid || "Livraison invalide"));
-
-      const srcStock = await Stock.findOne(source).lean().exec();
-      if (!srcStock || srcStock.quantite < quantite) {
-        return next(new Error("Stock source insuffisant pour la livraison"));
-      }
-      return next();
-    }
-
-    // VENTE / SORTIE: vérifier la source selon depotCentral/region/pointVente
-    if (["Vente", "Sortie"].includes(type)) {
-      const { source, reasonIfInvalid } = computeOperationSource(this);
-      if (!source) return next(new Error(reasonIfInvalid || "Portée invalide"));
-
-      // on applique la politique existante: seulement si statut est activé, on “consomme”
-      if (statut) {
-        const s = await Stock.findOne(source).lean().exec();
-        if (!s || s.quantite < quantite) {
-          return next(new Error("Stock insuffisant pour l'opération"));
-        }
-      }
-      return next();
-    }
-
-    next();
-  } catch (error) {
-    next(error as mongoose.CallbackError);
-  }
-});
-
-
-UserSchema.pre("save", async function (this: UserDoc) {
-  if (!this.password || !this.isModified("password")) return;
-  const salt = await bcrypt.genSalt(12);
-  this.password = await bcrypt.hash(this.password, salt);
-});
-
-
+attachMouvementHooks(MouvementStockSchema); 
 
 UserSchema.methods.comparePassword = async function (candidate: string) {
   if (!this.password) return false;
