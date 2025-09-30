@@ -22,6 +22,7 @@ import {
   attachMouvementHooks,
  
 } from "../Middlewares/operationHandler";
+import { withTenant } from "./plugins/withTenant";
 
 export type UserRoleType = (typeof UserRole)[number];
 
@@ -404,3 +405,31 @@ export const CommandeSchema = new Schema<ICommande>(
 );
 
 export const Commande = mongoose.model<ICommande>("Commande", CommandeSchema);
+
+
+
+
+
+
+
+
+
+// ===============================================
+// file: src/Models/model.ts  (extrait: appliquez le plugin)
+// ===============================================
+
+// ... vos schémas existants ...
+UserSchema.plugin(withTenant);
+CategorieSchema.plugin(withTenant);
+ProduitSchema.plugin(withTenant);
+PointVenteSchema.plugin(withTenant);
+RegionSchema.plugin(withTenant);
+StockSchema.plugin(withTenant);
+MouvementStockSchema.plugin(withTenant);
+CommandeProduitSchema.plugin(withTenant);
+CommandeSchema.plugin(withTenant);
+
+// Index uniques composés (exemples)
+UserSchema.index({ organisation: 1, email: 1 }, { unique: true });
+UserSchema.index({ organisation: 1, telephone: 1 }, { unique: true });
+CommandeSchema.index({ organisation: 1, numero: 1 }, { unique: true });
