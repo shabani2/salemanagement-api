@@ -255,10 +255,12 @@ console.error("Erreur lors de la mise à jour du mot de passe:", error);
 
 
 /* ---------------------------------- Login ---------------------------------- */
-export const login: RequestHandler = async (req, res) => {
+export const login: RequestHandler = async (req, res): Promise<void> => {
   try {
-    const email    = normalizeEmail((req.body as any)?.email);
-    const password = normalize((req.body as any)?.password);
+    const emailRaw = (req.body as any)?.email;
+    const password = String((req.body as any)?.password ?? ""); // ne pas normaliser
+
+    const email = normalizeEmail(emailRaw);
 
     if (!email || !password) {
       res.status(400).json({ message: "Email et mot de passe requis" });
@@ -269,9 +271,14 @@ export const login: RequestHandler = async (req, res) => {
       return;
     }
 
-    const user = await User.findOne({ email })
-      .populate("pointVente")
-      .populate("region");
+    let user = await User.findOne({ email }).populate("pointVente").populate("region");
+
+    if (!user) {
+      const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      user = await User.findOne({
+        email: { $regex: new RegExp(`^${esc(email)}$`, "i") },
+      }).populate("pointVente").populate("region");
+    }
 
     if (!user) {
       res.status(401).json({ message: "Adresse email incorrecte" });
@@ -282,9 +289,6 @@ export const login: RequestHandler = async (req, res) => {
       return;
     }
 
-    // ✅ Plus de blocage sur la vérification d'email
-    // (les nouveaux comptes sont créés avec emailVerified=true)
-
     const isMatch = await (user as any).comparePassword(password);
     if (!isMatch) {
       res.status(401).json({ message: "Mot de passe incorrect" });
@@ -293,9 +297,11 @@ export const login: RequestHandler = async (req, res) => {
 
     const token = generateToken(user);
     res.json({ token, user, needsEmailVerification: false });
+    return;
   } catch (err) {
     console.error("Erreur lors du login:", err);
     res.status(500).json({ message: "Erreur interne" });
+    return;
   }
 };
 

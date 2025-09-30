@@ -45,7 +45,8 @@ const UserSchema = new Schema<IUser>(
     nom: { type: String, required: true },
     prenom: { type: String, required: true },
     telephone: { type: String, required: true, unique: true },
-    email: { type: String, required: true, unique: true },
+   // email: { type: String, required: true, unique: true },
+    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     adresse: { type: String, required: true },
     password: { type: String }, // pas requis à la création
     role: { type: String, enum: USER_ROLES, required: true },
@@ -183,6 +184,86 @@ const MouvementStockSchema = new Schema<IMouvementStock>(
 
 // PRE-SAVE VALIDATION
 attachMouvementHooks(MouvementStockSchema); 
+
+
+
+// --- Ton hook existant: OK pour new/save et user.save() ---
+UserSchema.pre("save", async function (next) {
+  try {
+    if (!this.isModified("password")) return next();
+
+    const passwordToHash = (this as any).password as string | undefined;
+    if (!passwordToHash) {
+      return next(new Error("Password field is missing or empty."));
+    }
+
+    (this as any).password = await bcrypt.hash(passwordToHash, 10);
+    next();
+  } catch (err) {
+    next(err as mongoose.CallbackError);
+  }
+});
+
+// --- Utils: détecter un hash bcrypt pour éviter double-hash ---
+function looksHashed(value: unknown): boolean {
+  return typeof value === "string" && /^\$2[aby]\$\d{2}\$/.test(value);
+}
+
+// --- Centraliser le hash pour les middlewares de requête ---
+async function hashPasswordInUpdate(update: any) {
+  // Mot de passe possible dans update.password, update.$set.password, ou update.$setOnInsert.password
+  const containers = [update, update?.$set, update?.$setOnInsert];
+
+  for (const c of containers) {
+    if (!c || typeof c !== "object") continue;
+    if (!("password" in c)) continue;
+
+    const pwd = c.password;
+    if (!pwd) {
+      throw new Error("Password field is missing or empty.");
+    }
+    if (looksHashed(pwd)) {
+      // On suppose déjà hashé -> ne rien faire
+      continue;
+    }
+    c.password = await bcrypt.hash(String(pwd), 10);
+  }
+}
+
+// --- Hooks de requête: couvrent findOneAndUpdate / findByIdAndUpdate / updateOne ---
+UserSchema.pre("findOneAndUpdate", async function (next) {
+  try {
+    // @ts-ignore – getUpdate existe sur Query
+    const update = this.getUpdate();
+    if (update) await hashPasswordInUpdate(update);
+    next();
+  } catch (err) {
+    next(err as mongoose.CallbackError);
+  }
+});
+
+UserSchema.pre("updateOne", async function (next) {
+  try {
+    // @ts-ignore
+    const update = this.getUpdate();
+    if (update) await hashPasswordInUpdate(update);
+    next();
+  } catch (err) {
+    next(err as mongoose.CallbackError);
+  }
+});
+
+// (optionnel) si vous utilisez updateMany quelque part
+UserSchema.pre("updateMany", async function (next) {
+  try {
+    // @ts-ignore
+    const update = this.getUpdate();
+    if (update) await hashPasswordInUpdate(update);
+    next();
+  } catch (err) {
+    next(err as mongoose.CallbackError);
+  }
+});
 
 UserSchema.methods.comparePassword = async function (candidate: string) {
   if (!this.password) return false;
